@@ -194,7 +194,9 @@ Do not skip this — it's the part that differentiates the project.
 - [x] Starter corpus: 2 real datasheets fetched and parsed
       (STM32F103C8 — ST, LM358 — TI).
 - [x] Bulk corpus collection: 50/50 datasheets downloaded to `datasheets/`.
-- [ ] Ingestion pipeline.
+- [x] Ingestion pipeline: PDF parsing, fixed-size page-aware chunking,
+      BGE-M3 embeddings, and idempotent pgvector storage code.
+- [x] Initial unit tests for chunking and embedding helpers.
 - [ ] Retrieval + generation.
 - [ ] Deployment.
 - [ ] Evaluation harness.

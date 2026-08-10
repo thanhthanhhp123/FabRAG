@@ -1,3 +1,5 @@
+import pytest
+
 from src.chunk import chunk_pages
 from src.parse import Page
 
@@ -11,8 +13,9 @@ def test_chunk_pages_respects_size_and_overlap():
     assert len(chunks) > 1
     # step = chunk_size - overlap = 80, so chunk 1 should start at word80
     assert chunks[1].text.split()[0] == "word80"
-    # last word of chunk 0 should reappear as part of chunk 1's overlap
-    assert chunks[0].text.split()[-1] in chunks[1].text.split()
+    # The final 20 words of chunk 0 must be the first 20 words of chunk 1.
+    assert chunks[0].text.split()[-20:] == chunks[1].text.split()[:20]
+    assert all(len(chunk.text.split()) <= 100 for chunk in chunks)
 
 
 def test_chunk_pages_tracks_page_span():
@@ -32,8 +35,29 @@ def test_chunk_pages_empty_input():
     assert chunk_pages([]) == []
 
 
-def test_overlap_must_be_smaller_than_chunk_size():
-    import pytest
+def test_chunk_pages_skips_empty_pages_and_keeps_source_page_number():
+    pages = [
+        Page(number=4, text="   "),
+        Page(number=5, text="one two three"),
+    ]
 
-    with pytest.raises(ValueError):
-        chunk_pages([Page(number=1, text="a b c")], chunk_size=10, overlap=10)
+    chunks = chunk_pages(pages, chunk_size=10, overlap=0)
+
+    assert len(chunks) == 1
+    assert chunks[0].text == "one two three"
+    assert (chunks[0].page_start, chunks[0].page_end) == (5, 5)
+
+
+@pytest.mark.parametrize(
+    ("chunk_size", "overlap", "message"),
+    [
+        (0, 0, "chunk_size"),
+        (-1, 0, "chunk_size"),
+        (10, -1, "negative"),
+        (10, 10, "smaller"),
+        (10, 11, "smaller"),
+    ],
+)
+def test_chunk_pages_rejects_invalid_sizes(chunk_size, overlap, message):
+    with pytest.raises(ValueError, match=message):
+        chunk_pages([Page(number=1, text="a b c")], chunk_size=chunk_size, overlap=overlap)

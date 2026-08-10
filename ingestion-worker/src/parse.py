@@ -11,8 +11,7 @@ the LLM actually need.
 from __future__ import annotations
 
 from dataclasses import dataclass
-
-import pdfplumber
+from pathlib import Path
 
 
 @dataclass
@@ -29,8 +28,13 @@ def _render_table(table: list[list[str | None]]) -> str:
     return "\n".join(rows)
 
 
-def parse_pdf(path: str) -> list[Page]:
+def parse_pdf(path: str | Path) -> list[Page]:
     """Extract text + tables from every page of a PDF, in reading order."""
+    # Keep this import inside the function.  Chunking tests only need the
+    # lightweight Page data class; they should not need to install a PDF
+    # parser or open an actual PDF.
+    import pdfplumber
+
     pages: list[Page] = []
 
     with pdfplumber.open(path) as pdf:

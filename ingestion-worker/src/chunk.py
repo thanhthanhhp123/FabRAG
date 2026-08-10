@@ -38,6 +38,10 @@ def chunk_pages(
     chunk_size: int = DEFAULT_CHUNK_SIZE,
     overlap: int = DEFAULT_OVERLAP,
 ) -> list[ChunkRecord]:
+    if chunk_size <= 0:
+        raise ValueError("chunk_size must be greater than zero")
+    if overlap < 0:
+        raise ValueError("overlap must not be negative")
     if overlap >= chunk_size:
         raise ValueError("overlap must be smaller than chunk_size")
 
