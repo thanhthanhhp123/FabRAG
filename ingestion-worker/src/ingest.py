@@ -90,14 +90,21 @@ def main() -> None:
 
     print(f"Ingesting {len(targets)} file(s)...")
     total_chunks = 0
+    failures = 0
     for path in tqdm(targets):
         try:
             n = ingest_file(path)
             total_chunks += n
         except Exception as e:  # noqa: BLE001 - continue processing the remaining PDFs
+            failures += 1
             print(f"  [FAILED] {os.path.basename(path)}: {type(e).__name__}: {e}")
 
-    print(f"\nDone. {total_chunks} chunks written across {len(targets)} file(s).")
+    succeeded = len(targets) - failures
+    print(
+        f"\nDone. {total_chunks} chunks written; {succeeded} file(s) succeeded, {failures} failed."
+    )
+    if failures:
+        sys.exit(1)
 
 
 if __name__ == "__main__":

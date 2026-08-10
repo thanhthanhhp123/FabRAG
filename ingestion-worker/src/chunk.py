@@ -75,6 +75,12 @@ def chunk_pages(
             )
         )
 
+        # The current window already contains the document's final word.
+        # Advancing once more would create a trailing chunk made entirely
+        # (or mostly) from overlap already present in this chunk.
+        if start + chunk_size >= len(words):
+            break
+
         index += 1
         start += step
 

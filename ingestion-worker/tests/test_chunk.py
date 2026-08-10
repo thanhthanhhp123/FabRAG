@@ -35,6 +35,25 @@ def test_chunk_pages_empty_input():
     assert chunk_pages([]) == []
 
 
+def test_chunk_pages_does_not_create_overlap_only_trailing_chunk():
+    text = " ".join(f"word{i}" for i in range(100))
+
+    chunks = chunk_pages([Page(number=1, text=text)], chunk_size=100, overlap=20)
+
+    assert len(chunks) == 1
+    assert chunks[0].text.split() == text.split()
+
+
+def test_chunk_pages_final_chunk_contains_new_content_and_sequential_index():
+    text = " ".join(f"word{i}" for i in range(101))
+
+    chunks = chunk_pages([Page(number=1, text=text)], chunk_size=100, overlap=20)
+
+    assert [chunk.chunk_index for chunk in chunks] == [0, 1]
+    assert chunks[1].text.split() == text.split()[80:]
+    assert chunks[1].text.split()[-1] == "word100"
+
+
 def test_chunk_pages_skips_empty_pages_and_keeps_source_page_number():
     pages = [
         Page(number=4, text="   "),
