@@ -354,6 +354,49 @@ only marked end-to-end verified when it has run against a real PDF/model/databas
 - Final worker regression after device-transfer changes: 41 tests passed in
   0.40s, Ruff lint passed, and all 18 worker Python files matched Ruff format.
 
+### 2026-08-11 — Complete corpus ingestion on GPU
+
+- Started after committing and pushing GPU support as `b612db4` (`Enable
+  GPU-backed answer generation`). The development database currently has the 10
+  verified-seed documents; this milestone will ingest only the 40 missing PDFs,
+  preserving the already verified rows and avoiding unnecessary reprocessing.
+- The missing set will be derived by comparing committed `datasheets/*.pdf`
+  basenames with database filenames. Ingestion will run with Docker GPU access and
+  the verified CUDA runtime. Completion requires 50 distinct documents, no missing
+  embeddings, and a post-expansion seed evaluation to measure retrieval dilution
+  from the larger corpus.
+- The first GPU batch exposed a real memory constraint on the 12 GB RTX 3060.
+  BGE-M3's default embedding batch of 16 on a long STM32 document allocated about
+  8.93 GiB and then failed while requesting another 2.84 GiB. One shorter document
+  completed before the run was stopped, leaving 11 documents in the database.
+- Added `EMBEDDING_BATCH_SIZE` (default 16) as a validated runtime setting used
+  whenever callers do not pass an explicit batch. Invalid, zero, and negative
+  values fail before model encoding. The corpus retry will use batch 4, trading
+  some throughput for predictable VRAM headroom instead of falling back to CPU.
+- Retried exactly the remaining 39 PDFs with CUDA, batch size 4, and PyTorch's
+  expandable-segments allocator. The run completed in 17 minutes 18 seconds:
+  39 files succeeded, zero failed, and 5,138 chunks were written. The largest
+  STM32 reference manual required 345 embedding batches and completed without
+  another out-of-memory error.
+- Post-ingestion validation matched all 50 committed PDF basenames to all 50
+  database filenames, with no missing or extra rows. PostgreSQL now contains
+  5,646 chunks and zero null embeddings.
+- Re-ran the 10-question verified seed on the complete corpus using the RTX 3060.
+  It finished in 36.182 seconds. Candidate recall@10 was `0.9`, candidate MRR
+  `0.5311`, reranked recall@5 was `0.9`, and reranked MRR `0.4917`. Compared with
+  the 10-document baseline (`1.0`, `0.425`, `1.0`, `0.5117`), early candidate
+  ordering improved overall but one case was diluted out of the top 10.
+- Per-question inspection identified the miss as `lm317-output-range`; its
+  expected page did not appear in either candidate or reranked results. This is
+  now a concrete retrieval-regression target. The remaining nine expected
+  sources stayed within both cutoffs; these small seed metrics remain diagnostic,
+  not production-quality claims.
+- Final regression verification used Python 3.11 in the repository's ignored
+  model runtime: 45 worker tests passed in 1.12 seconds, Ruff lint passed, all 18
+  worker Python files matched Ruff format, and `git diff --check` passed. The old
+  host-created `ingestion-worker/.venv` points to Python 3.10 and cannot install
+  this package's Python >=3.11 dependencies; it was not used to claim success.
+
 ## Current pipeline
 
 ```text
@@ -367,13 +410,14 @@ PDF
   -> grounded answer generation (implemented and local-model smoke tested)
 ```
 
-The development database currently contains the 10 documents used by
-`questions.verified.seed.jsonl` (383 chunks), not the complete 50-document corpus.
+The development database contains the complete 50-document starter corpus:
+5,646 chunks with embeddings. The verified seed covers 10 of those documents.
 
 ## Development environment
 
 - Managed Python: `3.11.15`
-- Virtual environment: `ingestion-worker/.venv`
+- Verified Python 3.11 model runtime: `.runtime/model-venv` (ignored by Git;
+  invoked inside the Python 3.11 container)
 - Verified model runtime: PyTorch `2.9.1+cu128`, RTX 3060 (`cuda:0`)
 - PostgreSQL: 16 in Docker
 - pgvector: `0.8.6`
@@ -635,7 +679,7 @@ architecture should serve a stronger model behind a separate LLM server.
 At the time this document was written:
 
 ```text
-41 tests passed
+45 tests passed
 Ruff lint passed
 Ruff format check passed
 ```
@@ -649,7 +693,7 @@ unit suite.
 
 1. Add API-key authentication, rate limiting, request IDs, and structured logs
    before exposing the FastAPI service beyond a trusted development network.
-2. Ingest the complete corpus only after the single-document path is stable.
+2. Diagnose and recover the full-corpus `lm317-output-range` recall regression.
 3. Remove recurring headers/footers and improve PDF whitespace reconstruction.
 4. Add heading-aware/tokenizer-aware chunking and section metadata.
 5. Add a manually reviewed evaluation set and report recall@k, MRR, reranker

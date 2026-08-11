@@ -41,3 +41,21 @@ def test_embed_texts_empty_input_does_not_load_model(monkeypatch):
 def test_embed_texts_rejects_invalid_batch_size():
     with pytest.raises(ValueError, match="batch_size"):
         embed.embed_texts(["a chunk"], batch_size=0)
+
+
+def test_embed_texts_uses_configured_default_batch_size(monkeypatch):
+    model = FakeModel()
+    monkeypatch.setattr(embed, "_model", model)
+    monkeypatch.setenv("EMBEDDING_BATCH_SIZE", "4")
+
+    embed.embed_texts(["a chunk"])
+
+    assert model.calls[0][1]["batch_size"] == 4
+
+
+@pytest.mark.parametrize("value", ["0", "-1", "not-a-number"])
+def test_embed_texts_rejects_invalid_configured_batch_size(monkeypatch, value):
+    monkeypatch.setenv("EMBEDDING_BATCH_SIZE", value)
+
+    with pytest.raises(ValueError, match="EMBEDDING_BATCH_SIZE"):
+        embed.embed_texts(["a chunk"])

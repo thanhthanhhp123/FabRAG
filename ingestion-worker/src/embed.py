@@ -30,10 +30,23 @@ def get_model() -> SentenceTransformer:
     return _model
 
 
-def embed_texts(texts: list[str], batch_size: int = 16) -> list[list[float]]:
+def _configured_batch_size() -> int:
+    raw_value = os.environ.get("EMBEDDING_BATCH_SIZE", "16")
+    try:
+        batch_size = int(raw_value)
+    except ValueError as exc:
+        raise ValueError("EMBEDDING_BATCH_SIZE must be a positive integer") from exc
+    if batch_size <= 0:
+        raise ValueError("EMBEDDING_BATCH_SIZE must be a positive integer")
+    return batch_size
+
+
+def embed_texts(texts: list[str], batch_size: int | None = None) -> list[list[float]]:
     """Encode a list of chunk texts into vectors, normalized for cosine similarity."""
     if not texts:
         return []
+    if batch_size is None:
+        batch_size = _configured_batch_size()
     if batch_size <= 0:
         raise ValueError("batch_size must be greater than zero")
 

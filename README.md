@@ -212,6 +212,7 @@ Copy `.env.example` to `.env` and adjust these values as needed:
 | `DATABASE_URL` | `postgresql+psycopg://...` | SQLAlchemy connection URL used by the ingestion worker |
 | `EMBEDDING_MODEL` | `BAAI/bge-m3` | Sentence Transformer model used for indexing |
 | `EMBEDDING_DIM` | `1024` | Vector size expected by the database schema |
+| `EMBEDDING_BATCH_SIZE` | `16` | Embedding batch; lower it if long chunks exhaust GPU memory |
 | `CHUNK_SIZE_TOKENS` | `400` | Approximate chunk window; currently implemented as words |
 | `CHUNK_OVERLAP_TOKENS` | `50` | Approximate overlap; currently implemented as words |
 | `FABRAG_API_KEY` | none | Required `X-API-Key` secret for answer requests |
@@ -313,6 +314,12 @@ The first end-to-end seed run over 10 ingested documents and 383 chunks produced
 candidate recall@10 `1.0`, candidate MRR `0.425`, reranked recall@5 `1.0`, and
 reranked MRR `0.5117`. Treat these as development baseline values only: the seed
 is small, fact-oriented, and not independently reviewed.
+
+After ingesting all 50 starter documents (5,646 chunks), the same GPU-backed run
+produced candidate recall@10 `0.9`, candidate MRR `0.5311`, reranked recall@5
+`0.9`, and reranked MRR `0.4917` in 36.182 seconds. The missed case was
+`lm317-output-range`; it is a tracked retrieval-regression target rather than a
+reason to hide the corpus-expansion result.
 
 Planned metrics:
 
