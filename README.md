@@ -198,6 +198,9 @@ Copy `.env.example` to `.env` and adjust these values as needed:
 | `EMBEDDING_DIM` | `1024` | Vector size expected by the database schema |
 | `CHUNK_SIZE_TOKENS` | `400` | Approximate chunk window; currently implemented as words |
 | `CHUNK_OVERLAP_TOKENS` | `50` | Approximate overlap; currently implemented as words |
+| `FABRAG_API_KEY` | none | Required `X-API-Key` secret for answer requests |
+| `FABRAG_RATE_LIMIT_REQUESTS` | `30` | Requests allowed per API key and window |
+| `FABRAG_RATE_LIMIT_WINDOW_SECONDS` | `60` | In-memory rate-limit window length |
 
 Changing the embedding model or dimension requires a full re-index. If the vector dimension changes, update both `.env` and `ingestion-worker/src/schema.sql` before creating the database schema.
 
@@ -227,6 +230,7 @@ cd api-service
 python -m venv .venv
 source .venv/bin/activate
 python -m pip install -e ../ingestion-worker -e ".[dev]"
+export FABRAG_API_KEY='replace-with-a-long-random-secret'
 uvicorn fabrag_api.main:app --host 127.0.0.1 --port 8000
 ```
 
@@ -242,13 +246,20 @@ reranker, and generation models are available:
 ```bash
 curl -X POST http://127.0.0.1:8000/v1/answers \
   -H 'Content-Type: application/json' \
+  -H "X-API-Key: $FABRAG_API_KEY" \
+  -H 'X-Request-ID: demo_request_001' \
   -d '{"question":"What is the L293 supply voltage range?","candidate_k":10,"top_n":3}'
 ```
 
 The response contains `answer` text and a `sources` array with stable IDs,
-filename, page span, chunk index, and retrieval/reranker metadata. This baseline
-does not yet provide API-key authentication or rate limiting; do not expose it to
-an untrusted network.
+filename, page span, chunk index, and retrieval/reranker metadata. Every response
+also includes `X-Request-ID`; a valid client-supplied value is preserved, otherwise
+the server generates one. Access logs are JSON and contain request metadata but
+not the API key or question body.
+
+The built-in fixed-window limiter is per process. It is useful for a single-worker
+development deployment, but counters are not shared across workers or replicas.
+Use Redis or an API gateway before horizontal or public deployment.
 
 The Docker initialization script only runs against a new database volume. When the schema changes, apply the migration manually or recreate the local development volume if its data is disposable.
 
@@ -277,10 +288,11 @@ Results will be reported as measured values rather than estimated product-impact
 - [ ] Build the function-calling query router.
 - [x] Add an initial cited answer-generation path and no-evidence fallback.
 - [x] Expose the core answer path through an initial FastAPI service.
-- [ ] Add API-key authentication and rate limiting before public exposure.
+- [x] Add API-key authentication and a single-process rate-limit baseline.
 - [ ] Add a minimal web interface and feedback capture.
 - [ ] Build the offline evaluation harness and publish results.
-- [ ] Add structured observability, CI/CD, and deployment.
+- [x] Add request IDs and structured JSON access logs.
+- [ ] Add shared rate limiting, CI/CD, and deployment.
 
 ## Data and responsible use
 

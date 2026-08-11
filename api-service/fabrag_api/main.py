@@ -3,18 +3,55 @@
 from __future__ import annotations
 
 import logging
+import time
+import uuid
 
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, Request, Response
 from pydantic import BaseModel, Field, model_validator
 from src.answer import GeneratedAnswer, answer_question
 
+from .observability import (
+    REQUEST_ID_HEADER,
+    REQUEST_ID_PATTERN,
+    configure_access_logger,
+    request_id_context,
+)
+from .security import require_api_key
+
 logger = logging.getLogger(__name__)
+access_logger = configure_access_logger()
 
 app = FastAPI(
     title="FabRAG API",
     version="0.1.0",
     description="Grounded answers over electronics-manufacturing documents.",
 )
+
+
+@app.middleware("http")
+async def request_context(request: Request, call_next) -> Response:
+    supplied_id = request.headers.get(REQUEST_ID_HEADER, "")
+    request_id = supplied_id if REQUEST_ID_PATTERN.fullmatch(supplied_id) else uuid.uuid4().hex
+    token = request_id_context.set(request_id)
+    started_at = time.perf_counter()
+    status_code = 500
+    try:
+        response = await call_next(request)
+        status_code = response.status_code
+        response.headers[REQUEST_ID_HEADER] = request_id
+        return response
+    finally:
+        access_logger.info(
+            "request completed",
+            extra={
+                "request_id": request_id,
+                "method": request.method,
+                "path": request.url.path,
+                "status_code": status_code,
+                "duration_ms": round((time.perf_counter() - started_at) * 1000, 2),
+            },
+        )
+        request_id_context.reset(token)
 
 
 class AnswerRequest(BaseModel):
@@ -74,7 +111,10 @@ def health() -> dict[str, str]:
 
 
 @app.post("/v1/answers", response_model=AnswerResponse)
-def create_answer(request: AnswerRequest) -> AnswerResponse:
+def create_answer(
+    request: AnswerRequest,
+    _identity: str = Depends(require_api_key),
+) -> AnswerResponse:
     try:
         result = answer_question(request.question, request.candidate_k, request.top_n)
     except Exception as exc:

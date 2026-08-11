@@ -36,24 +36,30 @@ Implemented:
 - BGE cross-encoder reranking (`rerank.py`)
 - local, evidence-only answer generation with source IDs (`answer.py`)
 - typed health and answer HTTP endpoints (`api-service/fabrag_api/main.py`)
+- fail-closed API-key authentication and single-process rate limiting
+  (`api-service/fabrag_api/security.py`)
+- request correlation and JSON access logs (`api-service/fabrag_api/observability.py`)
 
 Tested without heavyweight PDF/model/database dependencies:
 
 - 41 unit tests covering parsing, chunking, embedding helpers, ingestion error
   handling, retrieval validation, hybrid fusion, reranking, and generation
+- 11 API contract/security/observability tests
 - Ruff lint and format checks
 
 Real PDF/model/database checks have also covered ingestion, retrieval, reranking,
-and a Qwen answer-generation smoke test. Not implemented yet: an LLM router, API
-authentication/rate limiting, UI, offline RAG evaluation, CI/CD, and deployment.
-Do not describe the repository as a deployed or production-ready chatbot until
-those parts exist.
+and a Qwen answer-generation smoke test. Not implemented yet: an LLM router,
+shared/distributed rate limiting, UI, offline RAG evaluation, CI/CD, and
+deployment. Do not describe the repository as a deployed or production-ready
+chatbot until those parts exist.
 
 ## Directory map
 
 ```text
 datasheets/                       Input PDFs (public documents only)
 api-service/fabrag_api/main.py    HTTP health and grounded-answer endpoints
+api-service/fabrag_api/security.py API-key auth and local rate limiting
+api-service/fabrag_api/observability.py Request IDs and JSON access logs
 ingestion-worker/src/parse.py     Step 1: PDF -> Page(number, text)
 ingestion-worker/src/chunk.py     Step 2: Page -> ChunkRecord
 ingestion-worker/src/embed.py     Step 3: chunk text -> normalized vectors

@@ -147,6 +147,51 @@ only marked end-to-end verified when it has run against a real PDF/model/databas
   The documentation explicitly warns that the baseline has no authentication or
   rate limiting and must not be exposed to an untrusted network.
 
+### 2026-08-11 — API security and observability hardening
+
+- Started after committing the FastAPI baseline as `132cd2b` (`Add grounded
+  answer API service`). Scope follows the new highest-priority limitation: API-key
+  authentication, bounded request rates, correlation IDs, and machine-readable
+  access logs.
+- Security behavior will be fail-closed. `/health` remains public for process
+  probes, while `/v1/answers` requires a configured `FABRAG_API_KEY` and a matching
+  `X-API-Key` header. A missing server key is a deployment/configuration failure,
+  not an implicit anonymous-development mode.
+- The first limiter will be an explicitly documented in-memory fixed-window
+  baseline, keyed by authenticated API key. It protects a single process but does
+  not coordinate counters across multiple workers or replicas; Redis or an API
+  gateway remains necessary before horizontal deployment.
+- Implemented fail-closed `X-API-Key` authentication using
+  `secrets.compare_digest`. The configured secret is read from `FABRAG_API_KEY`;
+  when it is absent, answer requests return 503 rather than silently becoming
+  anonymous. Invalid or missing client keys return 401 with `WWW-Authenticate`.
+- Implemented a thread-safe fixed-window limiter with configurable positive
+  integer settings (`FABRAG_RATE_LIMIT_REQUESTS`, default 30, and
+  `FABRAG_RATE_LIMIT_WINDOW_SECONDS`, default 60). Counters use a SHA-256 identity
+  rather than retaining raw API keys. Limited responses return 429 and a
+  `Retry-After` header. Invalid limiter configuration fails closed with 503.
+- Added request correlation middleware. Valid incoming `X-Request-ID` values are
+  preserved; missing or unsafe values are replaced with a random 32-character
+  identifier. The ID is included on success and FastAPI-generated error
+  responses.
+- Added compact JSON access logs containing timestamp, level, logger, message,
+  request ID, method, path, status, and duration. Headers and request bodies are
+  deliberately excluded, so neither API credentials nor engineering questions
+  are copied into access logs.
+- API verification after hardening:
+
+  ```text
+  11 tests passed in 1.02s
+  Ruff lint passed
+  Ruff format check passed (5 files)
+  ```
+
+  The tests include authentication configuration, invalid credentials, rate-limit
+  enforcement, invalid limiter configuration, `Retry-After`, request-ID
+  preservation/generation, and JSON log fields in addition to the original HTTP
+  contract tests. The same upstream TestClient deprecation warning remains
+  documented and unsuppressed.
+
 ## Current pipeline
 
 ```text
