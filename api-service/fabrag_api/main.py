@@ -84,6 +84,7 @@ class SourceResponse(BaseModel):
 class AnswerResponse(BaseModel):
     question: str
     answer: str
+    route: str
     sources: list[SourceResponse]
 
 
@@ -102,7 +103,12 @@ def _to_response(result: GeneratedAnswer) -> AnswerResponse:
         )
         for index, source in enumerate(result.sources, start=1)
     ]
-    return AnswerResponse(question=result.question, answer=result.text, sources=sources)
+    return AnswerResponse(
+        question=result.question,
+        answer=result.text,
+        route=result.route.value,
+        sources=sources,
+    )
 
 
 @app.get("/health")

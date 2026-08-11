@@ -426,6 +426,51 @@ only marked end-to-end verified when it has run against a real PDF/model/databas
   evaluation tests in 0.85 seconds, Ruff lint across both packages, Ruff format
   for all 21 checked Python files, and `git diff --check`.
 
+### 2026-08-11 — Query router and multi-hop orchestration
+
+- Started after committing and pushing the corrected LM317 evidence as
+  `bbc244c` (`Correct LM317 evaluation evidence`). This milestone implements the
+  MVP's missing decision step before retrieval: single-hop document lookup,
+  multi-hop comparison, electronics general knowledge, or out-of-domain reject.
+- The router will request a small validated JSON decision from the configured
+  local generator and fail safely to single-hop retrieval when model output is
+  malformed. Multi-hop execution will retrieve each proposed subquery, merge and
+  deduplicate chunks, and rerank the merged evidence against the original
+  question. Unit tests will inject fake routing/retrieval functions, so routing
+  behavior stays deterministic and does not download models in CI.
+- Added `src/router.py` with four validated routes, strict structured-output
+  parsing, a safe single-hop fallback, bounded two-to-four multi-hop subqueries,
+  and an obvious out-of-domain guard that runs before the model. Fenced JSON and
+  object-shaped subqueries from small models are normalized, while any model-
+  supplied answer fields are discarded and never reach retrieval or generation.
+- Integrated routing into `answer_question`. Single-hop retains the existing
+  path; reject returns without model/retrieval work; general knowledge returns no
+  fabricated document sources; multi-hop retrieves and reranks each subquery
+  separately, then deduplicates balanced evidence before one cited generation.
+  The API now reports the selected `route` in its typed response.
+- Real Qwen 0.5B GPU routing correctly classified the L293 single-hop question.
+  Before few-shot examples it emitted fenced/object JSON for the comparison;
+  after parser and prompt hardening it produced the exact two expected subqueries.
+  It still misclassified an exact football rejection example, so
+  `FABRAG_ROUTER_ENABLED` defaults to `false`. This preserves the verified
+  single-hop API until a stronger routing model passes a reviewed router set.
+- The first real multi-hop run retrieved both L293 and DRV8833 documents and
+  selected route `multi_hop`, but Qwen 0.5B answered with an unrelated operating
+  temperature and omitted citations. The run took 64.292 seconds. Multi-hop was
+  subsequently changed from a single merged rerank (which buried voltage chunks
+  at S4/S5) to per-subquery balanced reranking; it remains opt-in pending another
+  real-model verification.
+- Attempting that verification with `Qwen/Qwen2.5-3B-Instruct` exposed a host
+  runtime blocker before model download: the loaded NVIDIA kernel module is
+  `580.95.05`, while installed userspace libraries are `580.173.02`. Both
+  `nvidia-smi` and Docker fail with `NVML: driver/library version mismatch`.
+  A host reboot is normally required to load the updated module, and was not
+  performed without user authorization.
+- Verification after the safe-default integration: 62 ingestion-worker tests,
+  11 API tests, and 15 evaluation tests passed. Ruff lint passed across all three
+  packages and all 28 checked Python files matched Ruff format. The API suite
+  still reports the known upstream Starlette TestClient deprecation warning.
+
 ## Current pipeline
 
 ```text

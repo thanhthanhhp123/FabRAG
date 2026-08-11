@@ -4,10 +4,13 @@ from __future__ import annotations
 
 import argparse
 import os
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
-from .rerank import RerankedResult, retrieve_and_rerank
+from .hybrid_retrieve import HybridSearchResult, hybrid_retrieve
+from .rerank import RerankedResult, rerank
+from .router import Route, RouteDecision, route_question
 
 GENERATION_MODEL_NAME = os.environ.get("GENERATION_MODEL", "Qwen/Qwen2.5-0.5B-Instruct")
 
@@ -37,6 +40,7 @@ class GeneratedAnswer:
     question: str
     text: str
     sources: tuple[RerankedResult, ...]
+    route: Route = Route.SINGLE_HOP
 
 
 def _page_label(result: RerankedResult) -> str:
@@ -106,13 +110,108 @@ def generate_from_evidence(question: str, evidence: list[RerankedResult]) -> Gen
     return GeneratedAnswer(question=question.strip(), text=text, sources=tuple(evidence))
 
 
+def generate_general_knowledge(question: str) -> GeneratedAnswer:
+    """Answer an in-domain conceptual question without pretending it came from the corpus."""
+    tokenizer, model = get_generator()
+    messages = [
+        {
+            "role": "system",
+            "content": (
+                "Answer concise, general electronics or manufacturing questions. "
+                "Clearly state that the answer is general knowledge and has no document citation. "
+                "Do not invent sources, filenames, standards, or precise device specifications."
+            ),
+        },
+        {"role": "user", "content": question.strip()},
+    ]
+    rendered = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+    inputs = tokenizer(rendered, return_tensors="pt")
+    if hasattr(inputs, "to") and hasattr(model, "device"):
+        inputs = inputs.to(model.device)
+    generated = model.generate(
+        **inputs,
+        max_new_tokens=256,
+        do_sample=False,
+        pad_token_id=tokenizer.eos_token_id,
+    )
+    input_length = inputs["input_ids"].shape[1]
+    text = tokenizer.decode(generated[0][input_length:], skip_special_tokens=True).strip()
+    return GeneratedAnswer(question.strip(), text, (), Route.GENERAL_KNOWLEDGE)
+
+
+def _multi_hop_evidence(
+    subqueries: tuple[str, ...],
+    candidate_k: int,
+    top_n: int,
+    retrieve_fn: Callable[[str, int, int], list[HybridSearchResult]] = hybrid_retrieve,
+    rerank_fn: Callable[[str, list[HybridSearchResult], int], list[RerankedResult]] = rerank,
+) -> list[RerankedResult]:
+    evidence: dict[tuple[str, int], RerankedResult] = {}
+    per_hop_n = min(top_n, 3)
+    for subquery in subqueries:
+        candidates = retrieve_fn(subquery, candidate_k, candidate_k)
+        for result in rerank_fn(subquery, candidates, per_hop_n):
+            key = (result.filename, result.chunk_index)
+            previous = evidence.get(key)
+            if previous is None or result.reranker_score > previous.reranker_score:
+                evidence[key] = result
+    return list(evidence.values())
+
+
+def _router_enabled() -> bool:
+    return os.environ.get("FABRAG_ROUTER_ENABLED", "false").casefold() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+
+
 def answer_question(
     question: str,
     candidate_k: int = 10,
     top_n: int = 3,
+    *,
+    route_fn: Callable[[str], RouteDecision] | None = None,
+    retrieve_fn: Callable[[str, int, int], list[HybridSearchResult]] = hybrid_retrieve,
+    rerank_fn: Callable[[str, list[HybridSearchResult], int], list[RerankedResult]] = rerank,
+    evidence_generate_fn: Callable[[str, list[RerankedResult]], GeneratedAnswer] = (
+        generate_from_evidence
+    ),
+    general_generate_fn: Callable[[str], GeneratedAnswer] = generate_general_knowledge,
 ) -> GeneratedAnswer:
-    evidence = retrieve_and_rerank(question, candidate_k, top_n)
-    return generate_from_evidence(question, evidence)
+    if route_fn is None:
+        decision = (
+            route_question(question) if _router_enabled() else RouteDecision(Route.SINGLE_HOP)
+        )
+    else:
+        decision = route_fn(question)
+    if decision.route is Route.REJECT:
+        return GeneratedAnswer(
+            question.strip(),
+            "I can only help with electronics-manufacturing and engineering questions.",
+            (),
+            Route.REJECT,
+        )
+    if decision.route is Route.GENERAL_KNOWLEDGE:
+        result = general_generate_fn(question)
+        return GeneratedAnswer(result.question, result.text, result.sources, decision.route)
+    if decision.route is Route.MULTI_HOP:
+        evidence = _multi_hop_evidence(
+            decision.subqueries,
+            candidate_k,
+            top_n,
+            retrieve_fn,
+            rerank_fn,
+        )
+    else:
+        evidence = rerank_fn(
+            question,
+            retrieve_fn(question, candidate_k, candidate_k),
+            top_n,
+        )
+    result = evidence_generate_fn(question, evidence)
+    return GeneratedAnswer(result.question, result.text, result.sources, decision.route)
 
 
 def main() -> None:

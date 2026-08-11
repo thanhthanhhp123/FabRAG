@@ -2,7 +2,10 @@
 
 FabRAG is a production-oriented Retrieval-Augmented Generation (RAG) project for electronics manufacturing documentation. It is designed to help engineers find grounded answers in component datasheets, equipment manuals, SOPs, work instructions, and public standards excerpts—with citations back to the source document and page.
 
-> **Project status:** active development. Ingestion, hybrid retrieval, reranking, local grounded answer generation, and a FastAPI boundary are implemented as a Python prototype. The agentic router, evaluation harness, API hardening, and web UI remain on the roadmap.
+> **Project status:** active development. Ingestion, hybrid retrieval, reranking,
+> grounded generation, FastAPI, API hardening, retrieval evaluation, and an
+> opt-in query router are implemented as a Python prototype. Stronger-model
+> router validation, generation evaluation, web UI, CI/CD, and deployment remain.
 
 ## Why FabRAG?
 
@@ -31,6 +34,8 @@ The project is also a practical study of the LLM application layer: ingestion, r
 - Cross-encoder reranking with `BAAI/bge-reranker-base`.
 - Local evidence-only answer generation with source IDs such as `[S1]`.
 - A typed FastAPI endpoint returning answers plus structured source metadata.
+- An opt-in structured-output router with single-hop, multi-hop, general-knowledge,
+  and out-of-domain branches. It defaults off until a stronger model is evaluated.
 
 ## Architecture
 
@@ -218,6 +223,7 @@ Copy `.env.example` to `.env` and adjust these values as needed:
 | `FABRAG_API_KEY` | none | Required `X-API-Key` secret for answer requests |
 | `FABRAG_RATE_LIMIT_REQUESTS` | `30` | Requests allowed per API key and window |
 | `FABRAG_RATE_LIMIT_WINDOW_SECONDS` | `60` | In-memory rate-limit window length |
+| `FABRAG_ROUTER_ENABLED` | `false` | Enable experimental LLM routing and multi-hop orchestration |
 
 Changing the embedding model or dimension requires a full re-index. If the vector dimension changes, update both `.env` and `ingestion-worker/src/schema.sql` before creating the database schema.
 
@@ -268,7 +274,7 @@ curl -X POST http://127.0.0.1:8000/v1/answers \
   -d '{"question":"What is the L293 supply voltage range?","candidate_k":10,"top_n":3}'
 ```
 
-The response contains `answer` text and a `sources` array with stable IDs,
+The response contains `answer` text, the selected `route`, and a `sources` array with stable IDs,
 filename, page span, chunk index, and retrieval/reranker metadata. Every response
 also includes `X-Request-ID`; a valid client-supplied value is preserved, otherwise
 the server generates one. Access logs are JSON and contain request metadata but
@@ -341,7 +347,7 @@ Results will be reported as measured values rather than estimated product-impact
 - [x] Add an initial chunking test suite.
 - [ ] Add semantic/heading-aware chunking.
 - [x] Implement vector + keyword hybrid retrieval and reranking.
-- [ ] Build the function-calling query router.
+- [x] Build an opt-in structured-output query router and multi-hop orchestrator.
 - [x] Add an initial cited answer-generation path and no-evidence fallback.
 - [x] Expose the core answer path through an initial FastAPI service.
 - [x] Add API-key authentication and a single-process rate-limit baseline.

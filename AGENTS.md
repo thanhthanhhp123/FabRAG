@@ -40,19 +40,22 @@ Implemented:
   (`api-service/fabrag_api/security.py`)
 - request correlation and JSON access logs (`api-service/fabrag_api/observability.py`)
 - offline source/page recall and MRR evaluation (`evaluation/fabrag_eval/evaluate.py`)
+- opt-in structured-output query routing and balanced multi-hop orchestration
+  (`ingestion-worker/src/router.py`, `ingestion-worker/src/answer.py`)
 
 Tested without heavyweight PDF/model/database dependencies:
 
-- 41 unit tests covering parsing, chunking, embedding helpers, ingestion error
+- 62 unit tests covering parsing, chunking, embedding helpers, ingestion error
   handling, retrieval validation, hybrid fusion, reranking, and generation
 - 11 API contract/security/observability tests
 - 15 evaluation loader, seed-dataset, matching, and metric tests
 - Ruff lint and format checks
 
 Real PDF/model/database checks have also covered ingestion, retrieval, reranking,
-and a Qwen answer-generation smoke test. Not implemented yet: an LLM router,
-shared/distributed rate limiting, UI, offline RAG evaluation, CI/CD, and
-deployment. Do not describe the repository as a deployed or production-ready
+Qwen answer generation, and experimental routing. The router defaults off because
+Qwen 0.5B did not pass the real out-of-domain/multi-hop smoke cases. Not implemented
+yet: shared/distributed rate limiting, UI, offline generation evaluation, CI/CD,
+and deployment. Do not describe the repository as a deployed or production-ready
 chatbot until those parts exist.
 
 ## Directory map

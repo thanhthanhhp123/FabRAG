@@ -64,6 +64,7 @@ def test_create_answer_returns_citation_metadata(monkeypatch):
     assert response.json() == {
         "question": "What is the voltage?",
         "answer": "The range is 4.5 V to 36 V [S1].",
+        "route": "single_hop",
         "sources": [
             {
                 "source_id": "S1",
