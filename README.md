@@ -315,11 +315,13 @@ candidate recall@10 `1.0`, candidate MRR `0.425`, reranked recall@5 `1.0`, and
 reranked MRR `0.5117`. Treat these as development baseline values only: the seed
 is small, fact-oriented, and not independently reviewed.
 
-After ingesting all 50 starter documents (5,646 chunks), the same GPU-backed run
-produced candidate recall@10 `0.9`, candidate MRR `0.5311`, reranked recall@5
-`0.9`, and reranked MRR `0.4917` in 36.182 seconds. The missed case was
-`lm317-output-range`; it is a tracked retrieval-regression target rather than a
-reason to hide the corpus-expansion result.
+After ingesting all 50 starter documents (5,646 chunks), an initial GPU-backed
+run exposed an incomplete LM317 relevance label: page 1 contains the reviewed
+answer but only page 6 was accepted. After directly verifying and adding page 1
+as valid evidence, the corrected run produced candidate recall@10 `1.0`,
+candidate MRR `0.5511`, reranked recall@5 `1.0`, and reranked MRR `0.5417` in
+37.519 seconds. The pre-audit result and diagnosis remain recorded in
+`PROGRESS.md` rather than being silently replaced.
 
 Planned metrics:
 

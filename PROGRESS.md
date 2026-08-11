@@ -397,6 +397,35 @@ only marked end-to-end verified when it has run against a real PDF/model/databas
   host-created `ingestion-worker/.venv` points to Python 3.10 and cannot install
   this package's Python >=3.11 dependencies; it was not used to claim success.
 
+### 2026-08-11 — Full-corpus retrieval regression diagnosis
+
+- Started after committing and pushing the complete-corpus milestone as
+  `448a0af` (`Complete GPU corpus ingestion workflow`). The immediate target is
+  the only verified-seed miss, `lm317-output-range`, which disappears before
+  reranking because its expected source is absent from the hybrid top 10.
+- Diagnosis will inspect the committed PDF extraction, stored LM317 chunks, and
+  vector/keyword/fused candidate ranks independently. Any retrieval change must
+  improve the missed case without reducing the existing 9/10 successes and must
+  be verified against the complete 50-document database on GPU.
+- Expanded retrieval showed that LM317 chunks occupied fused ranks 1 through 7
+  when each channel was allowed 100 candidates. The page-6 chunk was only vector
+  rank 12, so it did not enter the benchmark's 10-candidate pool; however, the
+  page-1 LM317 chunk containing the same answer was vector rank 3 and fused rank
+  4. The system retrieved valid evidence that the label did not accept.
+- Direct `pdfplumber` inspection of committed PDF page 1 confirmed both the
+  feature text `Adjustable: 1.25V to 37V` and the description stating the same
+  output range. Added page 1 as a second valid expected source while retaining
+  reviewed page 6. This corrects incomplete relevance judgments without changing
+  retrieval code or retrofitting the answer to an unrelated source.
+- The corrected 10-question full-corpus GPU run completed in 37.519 seconds with
+  candidate recall@10 `1.0`, candidate MRR `0.5511`, reranked recall@5 `1.0`, and
+  reranked MRR `0.5417`. This restores both recall measures and improves both MRR
+  measures over the original 10-document baseline, while preserving the initial
+  0.9 result above as an audit trail of why the relevance label changed.
+- Final regression checks passed: 45 ingestion-worker tests in 1.22 seconds, 15
+  evaluation tests in 0.85 seconds, Ruff lint across both packages, Ruff format
+  for all 21 checked Python files, and `git diff --check`.
+
 ## Current pipeline
 
 ```text
