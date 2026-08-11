@@ -310,6 +310,50 @@ only marked end-to-end verified when it has run against a real PDF/model/databas
 - Final seed/schema verification completed with 15 tests passing in 0.17s, Ruff
   lint passing, and all 3 evaluation Python files matching Ruff format.
 
+### 2026-08-11 — GPU runtime enablement
+
+- Investigated why the previous ingestion/evaluation used CPU. The host had an
+  NVIDIA GeForce RTX 3060 (12 GB), driver 580.95.05, and CUDA 13.0 capability,
+  but two independent blockers existed: the ignored model environment contained
+  `torch 2.9.1+cpu`, and Docker declared an NVIDIA runtime whose
+  `nvidia-container-runtime` binary was not installed. `docker run --gpus all`
+  consequently failed before a container could start.
+- Installed NVIDIA Container Toolkit 1.19.1 from the already configured NVIDIA
+  repository, ran `nvidia-ctk runtime configure --runtime=docker`, and restarted
+  Docker. The pgvector container recovered through its restart policy and was
+  confirmed healthy. A CUDA 12.8 base container then detected the RTX 3060 and
+  all 12,288 MiB of VRAM.
+- Replaced the ignored runtime's CPU wheel with `torch 2.9.1+cu128`. CUDA 12.8 is
+  compatible with the newer host driver. Verification reported
+  `torch.cuda.is_available() == True`, device `NVIDIA GeForce RTX 3060`, and
+  BGE-M3 loaded on `cuda:0`.
+- Warm BGE-M3 micro-benchmark over 10 duplicate query strings:
+
+  ```text
+  total: 0.0216 seconds
+  per text: 0.0022 seconds
+  output: 10 x 1024
+  peak allocated VRAM: 2179.8 MiB
+  ```
+
+  This is a warm synthetic throughput check, not an end-to-end latency claim.
+  The earlier CPU evaluation showed about 1.5 seconds for each single-query
+  embedding, so GPU acceleration is material for this workload.
+- Re-ran the real 10-question retrieval/reranking evaluation with GPU access.
+  The aggregate metrics were identical to CPU, and total wall time including
+  container startup and model loading was 27.986 seconds. This confirms the
+  acceleration did not change ranking results on the seed.
+- SentenceTransformer embeddings and CrossEncoder reranking automatically choose
+  CUDA when available. The local Qwen generator did not: Transformers loaded it
+  on CPU and tokenized inputs stayed there. Updated `answer.py` to move the model
+  to CUDA when available and move its `BatchEncoding` to the model device, while
+  preserving CPU fallback and fake-model unit tests.
+- Real Qwen GPU smoke test loaded the model on `cuda:0`, returned the correct
+  `4.5 V to 36 V [S1]` answer, and completed in 16.465 seconds wall time including
+  container/model startup.
+- Final worker regression after device-transfer changes: 41 tests passed in
+  0.40s, Ruff lint passed, and all 18 worker Python files matched Ruff format.
+
 ## Current pipeline
 
 ```text
@@ -330,7 +374,7 @@ The development database currently contains the 10 documents used by
 
 - Managed Python: `3.11.15`
 - Virtual environment: `ingestion-worker/.venv`
-- PyTorch: `2.9.1+cpu`
+- Verified model runtime: PyTorch `2.9.1+cu128`, RTX 3060 (`cuda:0`)
 - PostgreSQL: 16 in Docker
 - pgvector: `0.8.6`
 - Local model cache: `.runtime/huggingface` (ignored by Git)

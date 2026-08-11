@@ -168,6 +168,9 @@ python -m src.parse ../datasheets/16_LM358_datasheet.pdf
 - **Embedding:** a numeric vector produced by a model. Similar meanings are
   placed near each other, enabling semantic search.
 - **pgvector:** a Postgres extension that stores and compares embeddings.
+- **CUDA runtime:** optional GPU acceleration. Verify both
+  `torch.cuda.is_available()` and Docker `--gpus all`; a runtime name in Docker
+  configuration alone does not prove the NVIDIA runtime binary is installed.
 - **Idempotent ingestion:** running the same input again gives a clean updated
   result rather than duplicate chunks.
 - **Hybrid retrieval:** a future combination of vector similarity and keyword

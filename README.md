@@ -178,6 +178,19 @@ Re-ingesting a file replaces its existing chunks, which makes experiments with c
 
 The first ingestion run may take substantially longer because it downloads and loads the embedding model. Processing all 50 PDFs is CPU- and memory-intensive.
 
+When PyTorch can see CUDA, BGE-M3 embeddings, cross-encoder reranking, and local
+Qwen generation use the GPU automatically. For Docker-based model runs, verify
+the NVIDIA Container Toolkit before starting a long ingestion:
+
+```bash
+docker run --rm --gpus all nvidia/cuda:12.8.1-base-ubuntu22.04 nvidia-smi
+python -c "import torch; print(torch.__version__, torch.cuda.is_available())"
+```
+
+The CUDA version shown by `nvidia-smi` is the driver's supported version; the
+PyTorch wheel may use an older compatible CUDA runtime. CPU PyTorch remains a
+valid fallback, but it is substantially slower for BGE-M3 on this corpus.
+
 ### 5. Inspect the result
 
 From the repository root:

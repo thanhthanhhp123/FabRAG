@@ -44,8 +44,20 @@ def test_generate_without_evidence_does_not_load_model(monkeypatch):
 
 
 def test_generate_decodes_only_new_tokens(monkeypatch):
+    class FakeInputs(dict):
+        def __init__(self):
+            super().__init__(input_ids=SimpleNamespace(shape=(1, 3)))
+            self.moved_to = None
+
+        def to(self, device):
+            self.moved_to = device
+            return self
+
     class FakeTokenizer:
         eos_token_id = 0
+
+        def __init__(self):
+            self.inputs = FakeInputs()
 
         def apply_chat_template(self, messages, **kwargs):
             assert messages[0]["content"] == answer.SYSTEM_PROMPT
@@ -55,19 +67,23 @@ def test_generate_decodes_only_new_tokens(monkeypatch):
             return "rendered prompt"
 
         def __call__(self, rendered, **kwargs):
-            return {"input_ids": SimpleNamespace(shape=(1, 3))}
+            return self.inputs
 
         def decode(self, tokens, **kwargs):
             assert tokens == [7, 8]
             return "The range is 4.5 V to 36 V [S1]."
 
     class FakeModel:
+        device = "cuda:0"
+
         def generate(self, **kwargs):
             return [[1, 2, 3, 7, 8]]
 
-    monkeypatch.setattr(answer, "get_generator", lambda: (FakeTokenizer(), FakeModel()))
+    tokenizer = FakeTokenizer()
+    monkeypatch.setattr(answer, "get_generator", lambda: (tokenizer, FakeModel()))
 
     result = answer.generate_from_evidence("What is the voltage?", [evidence()])
 
     assert result.text == "The range is 4.5 V to 36 V [S1]."
     assert len(result.sources) == 1
+    assert tokenizer.inputs.moved_to == "cuda:0"

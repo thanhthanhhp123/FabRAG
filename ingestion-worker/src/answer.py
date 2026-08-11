@@ -63,10 +63,13 @@ def build_evidence_prompt(question: str, evidence: list[RerankedResult]) -> str:
 def get_generator() -> tuple[Any, Any]:
     global _model, _tokenizer
     if _model is None or _tokenizer is None:
+        import torch
         from transformers import AutoModelForCausalLM, AutoTokenizer
 
         _tokenizer = AutoTokenizer.from_pretrained(GENERATION_MODEL_NAME)
         _model = AutoModelForCausalLM.from_pretrained(GENERATION_MODEL_NAME)
+        if torch.cuda.is_available():
+            _model.to("cuda")
         _model.eval()
     return _tokenizer, _model
 
@@ -90,6 +93,8 @@ def generate_from_evidence(question: str, evidence: list[RerankedResult]) -> Gen
     ]
     rendered = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
     inputs = tokenizer(rendered, return_tensors="pt")
+    if hasattr(inputs, "to") and hasattr(model, "device"):
+        inputs = inputs.to(model.device)
     generated = model.generate(
         **inputs,
         max_new_tokens=256,
