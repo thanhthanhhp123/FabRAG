@@ -36,6 +36,7 @@ The project is also a practical study of the LLM application layer: ingestion, r
 - A typed FastAPI endpoint returning answers plus structured source metadata.
 - An opt-in structured-output router with single-hop, multi-hop, general-knowledge,
   and out-of-domain branches. It defaults off until a stronger model is evaluated.
+- A minimal browser client and authenticated thumbs-up/down feedback capture.
 
 ## Architecture
 
@@ -263,6 +264,9 @@ The process-level health endpoint does not load models or query PostgreSQL:
 curl http://127.0.0.1:8000/health
 ```
 
+Open `http://127.0.0.1:8000/` for the minimal browser client. It asks for the API
+key on each page load and does not save it in browser storage.
+
 Submit a grounded question after `DATABASE_URL` is configured and the embedding,
 reranker, and generation models are available:
 
@@ -283,6 +287,19 @@ not the API key or question body.
 The built-in fixed-window limiter is per process. It is useful for a single-worker
 development deployment, but counters are not shared across workers or replicas.
 Use Redis or an API gateway before horizontal or public deployment.
+
+Each answer also has a UUID `answer_id`. Submit a rating with:
+
+```bash
+curl -X POST http://127.0.0.1:8000/v1/feedback \
+  -H 'Content-Type: application/json' \
+  -H "X-API-Key: $FABRAG_API_KEY" \
+  -d '{"answer_id":"<uuid-from-answer>","rating":"up"}'
+```
+
+For an existing database volume, apply the new `feedback` table from
+`ingestion-worker/src/schema.sql`; Docker initialization scripts only run for a
+new volume.
 
 The Docker initialization script only runs against a new database volume. When the schema changes, apply the migration manually or recreate the local development volume if its data is disposable.
 
@@ -351,7 +368,7 @@ Results will be reported as measured values rather than estimated product-impact
 - [x] Add an initial cited answer-generation path and no-evidence fallback.
 - [x] Expose the core answer path through an initial FastAPI service.
 - [x] Add API-key authentication and a single-process rate-limit baseline.
-- [ ] Add a minimal web interface and feedback capture.
+- [x] Add a minimal web interface and feedback capture.
 - [x] Build the initial offline retrieval/reranking evaluation harness.
 - [ ] Review the benchmark questions and publish measured results.
 - [x] Add request IDs and structured JSON access logs.

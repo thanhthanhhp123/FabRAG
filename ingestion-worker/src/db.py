@@ -10,6 +10,7 @@ change after real data exists).
 from __future__ import annotations
 
 import os
+import uuid
 
 from dotenv import load_dotenv
 from pgvector.sqlalchemy import Vector
@@ -19,6 +20,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    Uuid,
     create_engine,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, relationship
@@ -64,6 +66,15 @@ class Chunk(Base):
     embedding_model: Mapped[str | None] = mapped_column(Text)
 
     document: Mapped[Document] = relationship(back_populates="chunks")
+
+
+class Feedback(Base):
+    __tablename__ = "feedback"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    answer_id: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False, unique=True)
+    rating: Mapped[str] = mapped_column(String(4), nullable=False)
+    comment: Mapped[str | None] = mapped_column(String(1000))
 
 
 def get_engine():

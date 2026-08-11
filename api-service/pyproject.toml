@@ -26,3 +26,6 @@ build-backend = "setuptools.build_meta"
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["fabrag_api*"]
+
+[tool.setuptools.package-data]
+fabrag_api = ["static/*.html"]

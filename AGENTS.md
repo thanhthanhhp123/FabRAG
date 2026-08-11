@@ -42,12 +42,14 @@ Implemented:
 - offline source/page recall and MRR evaluation (`evaluation/fabrag_eval/evaluate.py`)
 - opt-in structured-output query routing and balanced multi-hop orchestration
   (`ingestion-worker/src/router.py`, `ingestion-worker/src/answer.py`)
+- minimal browser client and authenticated answer feedback persistence
+  (`api-service/fabrag_api/static/index.html`, `fabrag_api/feedback.py`)
 
 Tested without heavyweight PDF/model/database dependencies:
 
 - 62 unit tests covering parsing, chunking, embedding helpers, ingestion error
   handling, retrieval validation, hybrid fusion, reranking, and generation
-- 11 API contract/security/observability tests
+- 15 API contract/security/observability/feedback tests
 - 15 evaluation loader, seed-dataset, matching, and metric tests
 - Ruff lint and format checks
 

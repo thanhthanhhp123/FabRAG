@@ -1,5 +1,6 @@
 import json
 import logging
+import uuid
 
 import pytest
 from fastapi.testclient import TestClient
@@ -61,7 +62,9 @@ def test_create_answer_returns_citation_metadata(monkeypatch):
     )
 
     assert response.status_code == 200
-    assert response.json() == {
+    payload = response.json()
+    assert uuid.UUID(payload.pop("answer_id"))
+    assert payload == {
         "question": "What is the voltage?",
         "answer": "The range is 4.5 V to 36 V [S1].",
         "route": "single_hop",
@@ -79,6 +82,62 @@ def test_create_answer_returns_citation_metadata(monkeypatch):
             }
         ],
     }
+
+
+def test_web_client_is_served():
+    response = client.get("/")
+
+    assert response.status_code == 200
+    assert "FabRAG" in response.text
+    assert "/v1/feedback" in response.text
+
+
+def test_feedback_is_authenticated_and_persisted(monkeypatch):
+    answer_id = uuid.uuid4()
+    calls = []
+    monkeypatch.setattr(
+        main,
+        "store_feedback",
+        lambda stored_id, rating, comment: calls.append((stored_id, rating, comment)),
+    )
+
+    response = client.post(
+        "/v1/feedback",
+        json={"answer_id": str(answer_id), "rating": "down", "comment": "  wrong value  "},
+        headers=API_HEADERS,
+    )
+
+    assert response.status_code == 201
+    assert response.json() == {"status": "recorded"}
+    assert calls == [(answer_id, "down", "wrong value")]
+
+
+def test_feedback_rejects_invalid_rating():
+    response = client.post(
+        "/v1/feedback",
+        json={"answer_id": str(uuid.uuid4()), "rating": "maybe"},
+        headers=API_HEADERS,
+    )
+
+    assert response.status_code == 422
+
+
+def test_feedback_hides_database_error(monkeypatch):
+    monkeypatch.setattr(
+        main,
+        "store_feedback",
+        lambda *args: (_ for _ in ()).throw(RuntimeError("postgres secret")),
+    )
+
+    response = client.post(
+        "/v1/feedback",
+        json={"answer_id": str(uuid.uuid4()), "rating": "up"},
+        headers=API_HEADERS,
+    )
+
+    assert response.status_code == 503
+    assert response.json() == {"detail": "feedback persistence unavailable"}
+    assert "secret" not in response.text
 
 
 def test_create_answer_rejects_invalid_limits():

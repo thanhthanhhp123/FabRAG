@@ -5,11 +5,15 @@ from __future__ import annotations
 import logging
 import time
 import uuid
+from pathlib import Path
+from typing import Literal
 
 from fastapi import Depends, FastAPI, HTTPException, Request, Response
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field, model_validator
 from src.answer import GeneratedAnswer, answer_question
 
+from .feedback import store_feedback
 from .observability import (
     REQUEST_ID_HEADER,
     REQUEST_ID_PATTERN,
@@ -82,6 +86,7 @@ class SourceResponse(BaseModel):
 
 
 class AnswerResponse(BaseModel):
+    answer_id: str
     question: str
     answer: str
     route: str
@@ -104,6 +109,7 @@ def _to_response(result: GeneratedAnswer) -> AnswerResponse:
         for index, source in enumerate(result.sources, start=1)
     ]
     return AnswerResponse(
+        answer_id=str(uuid.uuid4()),
         question=result.question,
         answer=result.text,
         route=result.route.value,
@@ -111,9 +117,26 @@ def _to_response(result: GeneratedAnswer) -> AnswerResponse:
     )
 
 
+class FeedbackRequest(BaseModel):
+    answer_id: uuid.UUID
+    rating: Literal["up", "down"]
+    comment: str | None = Field(default=None, max_length=1000)
+
+    @model_validator(mode="after")
+    def normalize_comment(self) -> FeedbackRequest:
+        if self.comment is not None:
+            self.comment = self.comment.strip() or None
+        return self
+
+
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
+
+
+@app.get("/", response_class=FileResponse)
+def web_client() -> FileResponse:
+    return FileResponse(Path(__file__).parent / "static" / "index.html")
 
 
 @app.post("/v1/answers", response_model=AnswerResponse)
@@ -127,3 +150,16 @@ def create_answer(
         logger.exception("FabRAG answer pipeline failed", exc_info=exc)
         raise HTTPException(status_code=503, detail="answer pipeline unavailable") from exc
     return _to_response(result)
+
+
+@app.post("/v1/feedback", status_code=201)
+def create_feedback(
+    request: FeedbackRequest,
+    _identity: str = Depends(require_api_key),
+) -> dict[str, str]:
+    try:
+        store_feedback(request.answer_id, request.rating, request.comment)
+    except Exception as exc:
+        logger.exception("FabRAG feedback persistence failed", exc_info=exc)
+        raise HTTPException(status_code=503, detail="feedback persistence unavailable") from exc
+    return {"status": "recorded"}

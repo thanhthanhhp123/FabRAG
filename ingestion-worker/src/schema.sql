@@ -41,6 +41,14 @@ CREATE INDEX IF NOT EXISTS idx_chunks_document_id ON chunks(document_id);
 CREATE INDEX IF NOT EXISTS idx_chunks_text_fts
     ON chunks USING GIN (to_tsvector('english', text));
 
+CREATE TABLE IF NOT EXISTS feedback (
+    id          SERIAL PRIMARY KEY,
+    answer_id   UUID NOT NULL UNIQUE,
+    rating      TEXT NOT NULL CHECK (rating IN ('up', 'down')),
+    comment     VARCHAR(1000),
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
 -- NOTE: no ANN index (ivfflat/hnsw) on `embedding` yet — those need real data
 -- to build well. Create it after the first full ingest, e.g.:
 --   CREATE INDEX idx_chunks_embedding ON chunks

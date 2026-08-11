@@ -471,6 +471,38 @@ only marked end-to-end verified when it has run against a real PDF/model/databas
   packages and all 28 checked Python files matched Ruff format. The API suite
   still reports the known upstream Starlette TestClient deprecation warning.
 
+### 2026-08-11 — Answer feedback and minimal web client
+
+- Started after committing and pushing the safe router milestone as `e7385ce`
+  (`Add safe opt-in query routing`). This milestone adds the remaining demo-facing
+  MVP loop without depending on the temporarily unavailable GPU: stable answer
+  IDs, authenticated thumbs-up/down feedback persistence, and a small browser UI
+  that calls the existing answer and feedback endpoints.
+- Feedback will store the answer UUID, rating, and optional bounded comment, but
+  not duplicate API keys or question text. Database failures will use the same
+  sanitized 503 boundary as answer failures. HTTP tests will inject a fake writer
+  so the contract remains deterministic without PostgreSQL.
+- Added a UUID `answer_id` to answer responses and `POST /v1/feedback`, protected
+  by the existing API-key/rate-limit dependency. Ratings are restricted to `up`
+  or `down`; optional comments are trimmed and capped at 1,000 characters.
+  Persistence exceptions become a generic 503 and do not expose database details.
+- Added the `feedback` PostgreSQL table to the initialization schema and matching
+  SQLAlchemy model. Applied only that idempotent table creation to the live
+  development database, then verified insert/select inside a rolled-back
+  transaction. Feedback remained at zero rows; the existing 50 documents and
+  5,646 chunks were unchanged.
+- Added a dependency-free web client at `/`. The API key remains only in the
+  input field (no browser persistence); users can ask a question, inspect route
+  and citations, then submit thumbs-up/down feedback for that answer UUID.
+- API contract coverage increased from 11 to 15 tests, including static UI,
+  authenticated feedback persistence, invalid ratings, comment normalization,
+  and sanitized database errors.
+- Final verification: all 62 worker and 15 API tests passed; the unchanged 15
+  evaluation tests had already passed in the preceding milestone. Ruff lint
+  passed across all packages, all 29 checked Python files matched Ruff format,
+  package data includes the static HTML in built API distributions, and
+  `git diff --check` passed.
+
 ## Current pipeline
 
 ```text
