@@ -29,6 +29,7 @@ class ExpectedSource:
 class EvaluationQuestion:
     question_id: str
     question: str
+    reference_answer: str
     expected_sources: tuple[ExpectedSource, ...]
 
 
@@ -69,6 +70,7 @@ def load_questions(path: str | Path) -> list[EvaluationQuestion]:
                 raise ValueError(f"line {line_number}: duplicate id {question_id!r}")
             seen_ids.add(question_id)
             question = _required_string(record, "question", line_number)
+            reference_answer = _required_string(record, "reference_answer", line_number)
 
             raw_sources = record.get("expected_sources")
             if not isinstance(raw_sources, list) or not raw_sources:
@@ -89,7 +91,9 @@ def load_questions(path: str | Path) -> list[EvaluationQuestion]:
                     )
                 sources.append(ExpectedSource(filename=filename, page=page))
 
-            questions.append(EvaluationQuestion(question_id, question, tuple(sources)))
+            questions.append(
+                EvaluationQuestion(question_id, question, reference_answer, tuple(sources))
+            )
     if not questions:
         raise ValueError("evaluation file contains no questions")
     return questions

@@ -1,5 +1,6 @@
 import json
 from dataclasses import dataclass
+from pathlib import Path
 
 import pytest
 
@@ -27,6 +28,7 @@ def test_load_questions_validates_and_normalizes(tmp_path):
             {
                 "id": " voltage ",
                 "question": " What is the voltage? ",
+                "reference_answer": " 4.5 V to 36 V. ",
                 "expected_sources": [{"filename": " L293.pdf ", "page": 2}],
             }
         ),
@@ -37,6 +39,7 @@ def test_load_questions_validates_and_normalizes(tmp_path):
         EvaluationQuestion(
             "voltage",
             "What is the voltage?",
+            "4.5 V to 36 V.",
             (ExpectedSource("L293.pdf", 2),),
         )
     ]
@@ -46,8 +49,18 @@ def test_load_questions_validates_and_normalizes(tmp_path):
     "contents, message",
     [
         ("", "contains no questions"),
-        ('{"id":"x","question":"q","expected_sources":[]}', "non-empty list"),
-        ('{"id":"x","question":"q","expected_sources":[{"filename":"a","page":0}]}', "page"),
+        (
+            '{"id":"x","question":"q","expected_sources":[{"filename":"a"}]}',
+            "reference_answer",
+        ),
+        (
+            '{"id":"x","question":"q","reference_answer":"a","expected_sources":[]}',
+            "non-empty list",
+        ),
+        (
+            '{"id":"x","question":"q","reference_answer":"a","expected_sources":[{"filename":"a","page":0}]}',
+            "page",
+        ),
     ],
 )
 def test_load_questions_rejects_invalid_records(tmp_path, contents, message):
@@ -59,7 +72,9 @@ def test_load_questions_rejects_invalid_records(tmp_path, contents, message):
 
 
 def test_load_questions_rejects_duplicate_ids(tmp_path):
-    record = '{"id":"same","question":"q","expected_sources":[{"filename":"a"}]}'
+    record = (
+        '{"id":"same","question":"q","reference_answer":"a","expected_sources":[{"filename":"a"}]}'
+    )
     path = tmp_path / "questions.jsonl"
     path.write_text(f"{record}\n{record}\n", encoding="utf-8")
 
@@ -72,7 +87,7 @@ def test_load_questions_rejects_duplicate_ids(tmp_path):
     [
         ('["not an object"]', "each record must be a JSON object"),
         (
-            '{"id":"x","question":"q","expected_sources":["not an object"]}',
+            '{"id":"x","question":"q","reference_answer":"a","expected_sources":["not an object"]}',
             "expected source 1 must be an object",
         ),
     ],
@@ -83,6 +98,20 @@ def test_load_questions_rejects_wrong_json_types(tmp_path, contents, message):
 
     with pytest.raises(TypeError, match=message):
         load_questions(path)
+
+
+def test_verified_seed_has_ten_distinct_questions_with_reference_answers():
+    path = Path(__file__).parents[1] / "questions.verified.seed.jsonl"
+
+    questions = load_questions(path)
+
+    assert len(questions) == 10
+    assert len({question.question_id for question in questions}) == 10
+    assert all(question.reference_answer for question in questions)
+    assert (
+        len({source.filename for question in questions for source in question.expected_sources})
+        == 10
+    )
 
 
 def test_source_matching_uses_filename_and_page_overlap():
@@ -103,8 +132,8 @@ def test_first_relevant_rank_returns_one_based_rank():
 
 def test_evaluate_questions_reports_candidate_and_reranked_metrics():
     questions = [
-        EvaluationQuestion("q1", "first", (ExpectedSource("a.pdf", 2),)),
-        EvaluationQuestion("q2", "second", (ExpectedSource("b.pdf", 1),)),
+        EvaluationQuestion("q1", "first", "answer 1", (ExpectedSource("a.pdf", 2),)),
+        EvaluationQuestion("q2", "second", "answer 2", (ExpectedSource("b.pdf", 1),)),
     ]
 
     def retrieve(question, top_k, candidate_k):
@@ -134,7 +163,7 @@ def test_evaluate_questions_reports_candidate_and_reranked_metrics():
 
 @pytest.mark.parametrize(("candidate_k", "top_n"), [(0, 1), (2, 0), (2, 3)])
 def test_evaluate_questions_rejects_invalid_limits(candidate_k, top_n):
-    question = EvaluationQuestion("q", "question", (ExpectedSource("a.pdf"),))
+    question = EvaluationQuestion("q", "question", "answer", (ExpectedSource("a.pdf"),))
 
     with pytest.raises(ValueError):
         evaluate_questions([question], candidate_k=candidate_k, top_n=top_n)

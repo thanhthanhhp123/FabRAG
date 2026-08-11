@@ -271,11 +271,11 @@ The Docker initialization script only runs against a new database volume. When t
 The MVP will be evaluated with a manually reviewed set of 30–50 questions covering router decisions, single-hop lookup, multi-document comparison, general knowledge, and out-of-domain requests.
 
 The initial offline harness accepts one JSON object per line. Each question must
-have a unique ID and at least one relevant filename; add a one-based page when the
-evidence page has been reviewed:
+have a unique ID, a reference answer, and at least one relevant filename; add a
+one-based page when the evidence page has been reviewed:
 
 ```json
-{"id":"l293-voltage","question":"What is the L293 supply voltage range?","expected_sources":[{"filename":"32_L293_datasheet.pdf","page":1}]}
+{"id":"l293-voltage","question":"What is the L293 supply voltage range?","reference_answer":"The range is 4.5 V to 36 V.","expected_sources":[{"filename":"32_L293_datasheet.pdf","page":1}]}
 ```
 
 Install the evaluation package and ingestion worker in the same Python 3.11+
@@ -290,6 +290,16 @@ fabrag-evaluate questions.reviewed.jsonl --candidate-k 10 --top-n 5
 The JSON output reports candidate recall@k/MRR and reranked recall@n/MRR. The
 committed `questions.example.jsonl` demonstrates the schema only; it is not a
 reviewed benchmark and must not be used to claim project quality.
+
+`questions.verified.seed.jsonl` contains 10 facts checked directly against the
+committed PDF text and page numbers. It is an auditable seed across 10 documents,
+not the final 30–50 question benchmark; obtain independent human sign-off and add
+harder/multi-document questions before publishing quality claims.
+
+The first end-to-end seed run over 10 ingested documents and 383 chunks produced
+candidate recall@10 `1.0`, candidate MRR `0.425`, reranked recall@5 `1.0`, and
+reranked MRR `0.5117`. Treat these as development baseline values only: the seed
+is small, fact-oriented, and not independently reviewed.
 
 Planned metrics:
 

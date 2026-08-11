@@ -1,1 +1,1 @@
-{"id":"example-l293-voltage","question":"What is the L293 supply voltage range?","expected_sources":[{"filename":"32_L293_datasheet.pdf","page":1}]}
+{"id":"example-l293-voltage","question":"What is the L293 supply voltage range?","reference_answer":"The supply voltage range is 4.5 V to 36 V.","expected_sources":[{"filename":"32_L293_datasheet.pdf","page":1}]}

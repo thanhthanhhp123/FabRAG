@@ -231,6 +231,85 @@ only marked end-to-end verified when it has run against a real PDF/model/databas
   Ruff format check passed (3 files)
   ```
 
+### 2026-08-11 — Reviewed benchmark seed
+
+- Started after committing and pushing the evaluation harness as `b1559cd`
+  (`Add offline retrieval evaluation harness`). The goal is a small, auditable
+  seed set whose labels come from direct inspection of committed manufacturer
+  PDFs, not generated guesses.
+- Questions will span multiple device families and favor unambiguous facts such
+  as supply range, resolution, channel count, or operating temperature. Each
+  record will be accepted only after the relevant wording and one-based PDF page
+  have been checked. This seed is a foundation for the planned 30–50 question
+  benchmark, not a claim that the full evaluation set is complete.
+- Extended the JSONL contract with a required, normalized `reference_answer`.
+  Retrieval metrics do not consume it yet, but storing the reviewed answer beside
+  the evidence label makes the dataset auditable and prepares it for later answer
+  correctness/groundedness evaluation. Loader tests now reject a missing or blank
+  reference answer.
+- Added `questions.verified.seed.jsonl` with 10 distinct documents. Direct PDF
+  text inspection verified these labels:
+
+  1. L293 supply range `4.5 V to 36 V` — `32_L293_datasheet.pdf`, page 1.
+  2. INA219 sensed bus range `0 V to 26 V` — `24_INA219_datasheet.pdf`, page 1.
+  3. ADS1115 resolution `16-bit` — `26_ADS1115_datasheet.pdf`, page 1.
+  4. TMP117 maximum accuracy `±0.1 °C` from `-20 °C to 50 °C` —
+     `39_TMP117_datasheet.pdf`, page 1.
+  5. SN74HC595 type `8-bit serial-in, parallel-out shift register` —
+     `29_SN74HC595_datasheet.pdf`, page 1.
+  6. DAC8562 resolution `16-bit` — `49_DAC8562_datasheet.pdf`, page 1.
+  7. DRV8833 motor supply range `2.7 V to 10.8 V` —
+     `31_DRV8833_datasheet.pdf`, page 5.
+  8. LM317 recommended output range `1.25 V to 37 V` —
+     `23_LM317_datasheet.pdf`, page 6.
+  9. LM75B specified temperature range `-55 °C to 125 °C` —
+     `50_LM75B_datasheet.pdf`, page 4.
+  10. INA226 bus input range `0 V to 36 V` — `25_INA226_datasheet.pdf`, page 5.
+
+- The seed name intentionally says `verified`, not `reviewed`: the facts and page
+  labels were checked against PDF extraction during this work, but independent
+  human sign-off is still required before presenting them as a manually reviewed
+  benchmark or publishing model-quality claims.
+- Started a fresh local PostgreSQL 16 + pgvector service and installed the CPU
+  model dependencies into ignored `.runtime/model-venv`. The Hugging Face cache
+  initially contained only Qwen; BGE-M3 and the reranker artifacts remain ignored
+  runtime data and are not included in the Git diff.
+- Ingested exactly the 10 labeled seed documents with BGE-M3. The batch completed
+  in 10 minutes 7 seconds:
+
+  ```text
+  383 chunks written
+  10 files succeeded, 0 failed
+  database: 10 distinct documents, 383 chunks, 0 missing embeddings
+  ```
+
+  Per-document chunk counts ranged from 13 (L293) to 70 (ADS1115). An initial
+  verification query accidentally labeled joined `COUNT(*)` as `documents` and
+  printed 383; it was immediately corrected to `COUNT(DISTINCT d.id)`, which
+  confirmed the actual 10 documents. This SQL-check error did not modify data.
+- Ran the real evaluation CLI with `candidate_k=10` and `top_n=5` over the 10
+  seed questions:
+
+  ```json
+  {
+    "question_count": 10,
+    "candidate_k": 10,
+    "candidate_recall_at_k": 1.0,
+    "candidate_mrr": 0.425,
+    "top_n": 5,
+    "reranked_recall_at_n": 1.0,
+    "reranked_mrr": 0.5116666666666666
+  }
+  ```
+
+  All labeled evidence was present in both candidate and reranked cutoffs. The
+  cross-encoder improved MRR by about 0.0867 while preserving recall. These are
+  development baseline values, not publishable quality claims: the set has only
+  10 fact-oriented questions, covers only 10 of 50 documents, and lacks
+  independent human sign-off and difficult negative/multi-document cases.
+- Final seed/schema verification completed with 15 tests passing in 0.17s, Ruff
+  lint passing, and all 3 evaluation Python files matching Ruff format.
+
 ## Current pipeline
 
 ```text
@@ -244,8 +323,8 @@ PDF
   -> grounded answer generation (implemented and local-model smoke tested)
 ```
 
-The database currently contains one development document
-(`32_L293_datasheet.pdf`), not the complete 50-document corpus.
+The development database currently contains the 10 documents used by
+`questions.verified.seed.jsonl` (383 chunks), not the complete 50-document corpus.
 
 ## Development environment
 
