@@ -15,10 +15,21 @@ _tokenizer: Any | None = None
 _model: Any | None = None
 
 SYSTEM_PROMPT = """You answer questions about electronics-manufacturing documents.
-Use only the supplied evidence. Do not use unsupported facts.
-Every factual claim must cite one or more source IDs such as [S1].
+Treat the supplied evidence as the only source of truth, even if it conflicts with
+your prior knowledge. When the evidence directly states the requested value, report
+that value; do not question, reinterpret, or reject it.
+Use only the supplied evidence. Do not add unsupported facts.
+Every factual sentence must end with one or more source IDs such as [S1].
 If the evidence does not answer the question, say exactly: I don't have enough evidence.
 Keep the answer concise and never invent a filename, page number, or source ID."""
+
+EXAMPLE_USER_PROMPT = """Question: What is the operating temperature?
+
+Evidence:
+
+[S1] File: example.pdf; page: 2
+The operating temperature is -40 C to 85 C."""
+EXAMPLE_ASSISTANT_ANSWER = "The operating temperature is -40 C to 85 C [S1]."
 
 
 @dataclass(frozen=True)
@@ -73,6 +84,8 @@ def generate_from_evidence(question: str, evidence: list[RerankedResult]) -> Gen
     tokenizer, model = get_generator()
     messages = [
         {"role": "system", "content": SYSTEM_PROMPT},
+        {"role": "user", "content": EXAMPLE_USER_PROMPT},
+        {"role": "assistant", "content": EXAMPLE_ASSISTANT_ANSWER},
         {"role": "user", "content": prompt},
     ]
     rendered = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)

@@ -2,7 +2,7 @@
 
 FabRAG is a production-oriented Retrieval-Augmented Generation (RAG) project for electronics manufacturing documentation. It is designed to help engineers find grounded answers in component datasheets, equipment manuals, SOPs, work instructions, and public standards excerpts—with citations back to the source document and page.
 
-> **Project status:** active development. The PDF ingestion pipeline and a 50-document starter corpus are in the repository. The query API, agentic router, hybrid retrieval, answer generation, evaluation harness, and web UI are on the roadmap and are not implemented yet.
+> **Project status:** active development. Ingestion, hybrid retrieval, reranking, and local grounded answer generation are implemented as a Python prototype. The query API, agentic router, evaluation harness, and web UI remain on the roadmap.
 
 ## Why FabRAG?
 
@@ -27,32 +27,35 @@ The project is also a practical study of the LLM application layer: ingestion, r
 - PostgreSQL full-text and vector-ready schema.
 - Unit tests for chunk sizing, overlap, page tracking, and validation.
 - Docker Compose setup for the local PostgreSQL/pgvector service.
+- Weighted reciprocal-rank fusion of vector and PostgreSQL full-text results.
+- Cross-encoder reranking with `BAAI/bge-reranker-base`.
+- Local evidence-only answer generation with source IDs such as `[S1]`.
 
 ## Architecture
 
-The ingestion path is implemented today. The online question-answering path shown below is the target MVP architecture.
+The ingestion and core RAG paths are implemented today as Python modules. The API and routing layer shown below remains the target MVP architecture.
 
 ```mermaid
 flowchart LR
-    subgraph Implemented[Implemented]
+    subgraph Implemented[Implemented Python pipeline]
         PDF[PDF corpus] --> Parse[Text and table parsing]
         Parse --> Chunk[Page-aware chunking]
         Chunk --> Embed[BGE-M3 embeddings]
         Embed --> DB[(PostgreSQL + pgvector)]
+        DB --> Retrieve[Hybrid retrieval]
+        Retrieve --> Rerank[Cross-encoder reranker]
+        Rerank --> Generate[Grounded generation]
     end
 
     subgraph Planned[Planned MVP]
         User[Web or API client] --> API[FastAPI]
         API --> Router{LLM query router}
-        Router -->|single-hop| Retrieve[Hybrid retrieval]
+        Router -->|single-hop| Retrieve
         Router -->|multi-hop| Multi[Multiple retrieval passes]
-        Router -->|general knowledge| Generate[Answer generation]
+        Router -->|general knowledge| Generate
         Router -->|out of domain| Reject[Polite rejection]
-        DB --> Retrieve
         DB --> Multi
-        Retrieve --> Rerank[Cross-encoder reranker]
         Multi --> Rerank
-        Rerank --> Generate
         Generate --> Answer[Grounded answer + citations]
     end
 ```
@@ -75,6 +78,10 @@ FabRAG/
 │   │   ├── embed.py               # Sentence Transformer embeddings
 │   │   ├── db.py                  # SQLAlchemy models and DB helpers
 │   │   ├── ingest.py              # End-to-end ingestion CLI
+│   │   ├── retrieve.py            # pgvector semantic retrieval
+│   │   ├── hybrid_retrieve.py     # Vector + full-text rank fusion
+│   │   ├── rerank.py              # Cross-encoder candidate reranking
+│   │   ├── answer.py              # Local grounded generation
 │   │   └── schema.sql             # PostgreSQL + pgvector schema
 │   ├── tests/
 │   └── pyproject.toml
@@ -229,9 +236,9 @@ Results will be reported as measured values rather than estimated product-impact
 - [x] Implement PDF parsing, fixed-size chunking, embedding, and storage.
 - [x] Add an initial chunking test suite.
 - [ ] Add semantic/heading-aware chunking.
-- [ ] Implement vector + keyword hybrid retrieval and reranking.
+- [x] Implement vector + keyword hybrid retrieval and reranking.
 - [ ] Build the function-calling query router.
-- [ ] Add cited answer generation and out-of-domain guardrails.
+- [x] Add an initial cited answer-generation path and no-evidence fallback.
 - [ ] Expose a rate-limited, API-key-protected FastAPI service.
 - [ ] Add a minimal web interface and feedback capture.
 - [ ] Build the offline evaluation harness and publish results.

@@ -28,6 +28,12 @@ def test_build_evidence_prompt_assigns_source_ids_and_pages():
     assert "The supply range is 4.5 V to 36 V." in prompt
 
 
+def test_system_prompt_prioritizes_direct_evidence_and_requires_citations():
+    assert "only source of truth" in answer.SYSTEM_PROMPT
+    assert "directly states the requested value" in answer.SYSTEM_PROMPT
+    assert "Every factual sentence must end with" in answer.SYSTEM_PROMPT
+
+
 def test_generate_without_evidence_does_not_load_model(monkeypatch):
     monkeypatch.setattr(answer, "get_generator", lambda: pytest.fail("model should not load"))
 
@@ -43,6 +49,9 @@ def test_generate_decodes_only_new_tokens(monkeypatch):
 
         def apply_chat_template(self, messages, **kwargs):
             assert messages[0]["content"] == answer.SYSTEM_PROMPT
+            assert messages[1]["content"] == answer.EXAMPLE_USER_PROMPT
+            assert messages[2]["content"] == answer.EXAMPLE_ASSISTANT_ANSWER
+            assert messages[3]["content"].startswith("Question: What is the voltage?")
             return "rendered prompt"
 
         def __call__(self, rendered, **kwargs):

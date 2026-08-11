@@ -31,15 +31,21 @@ Implemented:
 - fixed-size, overlapping chunks with source-page tracking (`chunk.py`)
 - BGE-M3 embedding generation (`embed.py`)
 - idempotent PostgreSQL + pgvector storage (`db.py`, `ingest.py`, `schema.sql`)
+- vector and PostgreSQL full-text hybrid retrieval (`retrieve.py`,
+  `hybrid_retrieve.py`)
+- BGE cross-encoder reranking (`rerank.py`)
+- local, evidence-only answer generation with source IDs (`answer.py`)
 
 Tested without heavyweight PDF/model/database dependencies:
 
-- unit tests for chunk boundaries, overlap, page ranges, empty input and bad
-  configuration (`tests/test_chunk.py`)
+- 41 unit tests covering parsing, chunking, embedding helpers, ingestion error
+  handling, retrieval validation, hybrid fusion, reranking, and generation
+- Ruff lint and format checks
 
-Not implemented yet: retrieval, reranking, an LLM router, answer generation,
+Real PDF/model/database checks have also covered ingestion, retrieval, reranking,
+and a Qwen answer-generation smoke test. Not implemented yet: an LLM router,
 FastAPI/UI, offline RAG evaluation, CI/CD, and deployment. Do not describe the
-repository as a working chatbot until those parts exist.
+repository as a deployed or production-ready chatbot until those parts exist.
 
 ## Directory map
 

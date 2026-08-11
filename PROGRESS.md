@@ -4,6 +4,100 @@ This document records what has actually been implemented and verified. It is
 intentionally more conservative than the target architecture: a component is
 only marked end-to-end verified when it has run against a real PDF/model/database.
 
+## Work log
+
+### 2026-08-11 — Repository handoff and baseline audit
+
+- Cloned `https://github.com/thanhthanhhp123/FabRAG` on branch `main` at commit
+  `98e75c3` (`Implement retrieval and grounded RAG pipeline`). The checkout was
+  clean and matched `origin/main` before this work log was added.
+- Read the contributor guide, README, package configuration, recent Git history,
+  source/test inventory, and this progress record before changing implementation.
+- Confirmed that the implementation is ahead of parts of the documentation:
+  retrieval, hybrid fusion, reranking, and grounded answer generation exist in
+  `ingestion-worker/src`, while README/AGENTS still describe several of them as
+  future work. Documentation alignment is therefore a tracked follow-up rather
+  than evidence that those components are absent.
+- Selected the first concrete continuation task from the existing "Known
+  limitations and next work" list: establish a clean test/lint baseline, then
+  complete the real Qwen answer-generation smoke test if the local environment
+  and model cache permit it. Results and any code changes will be recorded below
+  as they happen.
+- First baseline attempt could not start the tests: the documented
+  `ingestion-worker/.venv` is correctly not committed, and the fresh workspace's
+  system Python reported `No module named pytest`. This is an environment setup
+  gap, not a failing project test. The next action is to create the local virtual
+  environment and install the declared development dependencies.
+- Environment follow-up found only Python 3.10.12 on the host, while the package
+  correctly requires Python 3.11 or newer. Docker 28.1.1 was available, so the
+  checks were moved to the official `python:3.11-slim` image instead of weakening
+  the project's Python constraint.
+- A normal unconstrained dependency resolution selected a new PyTorch build with
+  the complete CUDA 13 stack. That download was stopped because this workspace is
+  CPU-only and unit tests mock model execution. A CPU/minimal test dependency set
+  was used for the baseline; future real-model verification must explicitly use
+  CPU PyTorch to avoid downloading several GB of unused GPU libraries.
+- Baseline verification on Python 3.11 completed successfully:
+
+  ```text
+  pytest -q:                 40 passed in 0.78s
+  ruff check src tests:      All checks passed
+  ruff format --check:       18 files already formatted
+  ```
+
+  This establishes that commit `98e75c3` is internally consistent before the
+  next implementation step. The next check is a real Qwen generation using
+  supplied evidence, isolated from the database so it tests only the still
+  unverified tokenizer/model/generation path.
+- Installed the model runtime under ignored `.runtime/model-venv` with explicit
+  `torch==2.9.1+cpu` and `transformers==4.57.1`. Hugging Face model files are
+  stored under ignored `.runtime/huggingface`; no generated environment or model
+  weights are part of the Git diff.
+- The first real `Qwen/Qwen2.5-0.5B-Instruct` smoke test completed without a
+  runtime error and preserved the supplied source metadata, but its answer was
+  behaviorally incorrect. Given explicit evidence that the range is `4.5 V to
+  36 V`, it claimed the evidence was insufficient and emitted no `[S1]` citation.
+  Therefore answer generation is **not** considered verified merely because the
+  model loaded and generated text.
+- Root cause at this stage is weak instruction following by the 0.5B smoke-test
+  model, exposed by a prompt that did not explicitly tell it to accept directly
+  stated evidence over prior beliefs. The system prompt is being strengthened to
+  make evidence the sole source of truth, require direct extraction of stated
+  values, and require each factual sentence to end in a source ID. A unit test is
+  added for these invariants before repeating the real-model check.
+- After that prompt-only change, all 41 tests and both Ruff checks passed, but the
+  second real-model run still returned only `I don't have enough evidence.` This
+  rules out the earlier contradiction but still fails extraction and citation.
+  The next refinement adds one short few-shot conversation demonstrating the
+  exact desired transformation: a value stated in `[S1]` becomes a concise answer
+  ending in `[S1]`. The example uses unrelated temperature data so it teaches the
+  response pattern without leaking the L293 test answer.
+- The third real-model run, now with the few-shot example, passed:
+
+  ```text
+  Question: What is the supply voltage range of the L293?
+  Answer: The supply voltage range for the L293 device is 4.5 V to 36 V [S1].
+  Source metadata: 32_L293_datasheet.pdf, pages 1-3
+  ```
+
+  This closes the previously pending local Qwen smoke test for a controlled
+  evidence input. It does not establish broad answer quality; that still requires
+  the planned reviewed evaluation set.
+- Final verification after the few-shot implementation:
+
+  ```text
+  pytest -q:                 41 passed in 0.75s
+  ruff check src tests:      All checks passed
+  ruff format --check:       18 files already formatted
+  git diff --check:          passed
+  ```
+
+- Updated `README.md` and `AGENTS.md` so repository-facing status, architecture,
+  directory map, and roadmap match the already implemented retrieval, reranking,
+  and answer-generation modules. The remaining next milestone is the FastAPI
+  boundary (or the evaluation harness before it), not reimplementing those core
+  modules.
+
 ## Current pipeline
 
 ```text
@@ -14,7 +108,7 @@ PDF
   -> PostgreSQL + pgvector storage
   -> vector + keyword hybrid retrieval
   -> cross-encoder reranking
-  -> grounded answer generation (implemented, local-model smoke test pending)
+  -> grounded answer generation (implemented and local-model smoke tested)
 ```
 
 The database currently contains one development document
@@ -266,17 +360,26 @@ Configured smoke-test model:
 Qwen/Qwen2.5-0.5B-Instruct
 ```
 
-Status: code and unit tests are complete, but the first real model download was
-interrupted near completion. Therefore local answer generation is **not yet
-end-to-end verified**. The 0.5B model is intended only as a CPU smoke test; the
-target architecture should serve a stronger model behind a separate LLM server.
+Status: code, unit tests, and a real CPU model smoke test are complete. A single
+few-shot example was needed because the 0.5B model incorrectly selected the
+no-evidence fallback when given a directly stated value. With that example, the
+real output was:
+
+```text
+The supply voltage range for the L293 device is 4.5 V to 36 V [S1].
+```
+
+The returned source metadata remained `32_L293_datasheet.pdf`, pages 1-3. This
+verifies the local generation path for a controlled input, not general answer
+quality. The 0.5B model is intended only as a CPU smoke test; the target
+architecture should serve a stronger model behind a separate LLM server.
 
 ## Test status
 
 At the time this document was written:
 
 ```text
-40 tests passed
+41 tests passed
 Ruff lint passed
 Ruff format check passed
 ```
@@ -288,16 +391,15 @@ unit suite.
 
 ## Known limitations and next work
 
-1. Finish the Qwen smoke-test download and run answer generation end to end.
-2. Move online retrieval/reranking/generation out of `ingestion-worker` into a
+1. Move online retrieval/reranking/generation out of `ingestion-worker` into a
    FastAPI service; the current location is an incremental prototype.
-3. Ingest the complete corpus only after the single-document path is stable.
-4. Remove recurring headers/footers and improve PDF whitespace reconstruction.
-5. Add heading-aware/tokenizer-aware chunking and section metadata.
-6. Add a manually reviewed evaluation set and report recall@k, MRR, reranker
+2. Ingest the complete corpus only after the single-document path is stable.
+3. Remove recurring headers/footers and improve PDF whitespace reconstruction.
+4. Add heading-aware/tokenizer-aware chunking and section metadata.
+5. Add a manually reviewed evaluation set and report recall@k, MRR, reranker
    before/after metrics, citation correctness and groundedness.
-7. Add a query router, out-of-domain handling and multi-document/multi-hop flow.
-8. Add API authentication, rate limiting, structured logs, feedback and CI/CD.
+6. Add a query router, out-of-domain handling and multi-document/multi-hop flow.
+7. Add API authentication, rate limiting, structured logs, feedback and CI/CD.
 
 FabRAG remains an active-development RAG prototype. It must not yet be described
 as a deployed or production-ready chatbot.
