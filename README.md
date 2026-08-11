@@ -74,6 +74,9 @@ FabRAG/
 ├── api-service/                    # FastAPI boundary for online questions
 │   ├── fabrag_api/main.py          # Health and grounded-answer endpoints
 │   └── tests/                      # HTTP contract tests with a mocked pipeline
+├── evaluation/                     # Offline retrieval/reranking metrics
+│   ├── fabrag_eval/evaluate.py      # JSONL loader, recall@k, and MRR runner
+│   └── questions.example.jsonl     # Format example; not a reviewed benchmark
 ├── datasheets/                    # 50-document starter corpus
 ├── ingestion-worker/
 │   ├── src/
@@ -267,6 +270,27 @@ The Docker initialization script only runs against a new database volume. When t
 
 The MVP will be evaluated with a manually reviewed set of 30–50 questions covering router decisions, single-hop lookup, multi-document comparison, general knowledge, and out-of-domain requests.
 
+The initial offline harness accepts one JSON object per line. Each question must
+have a unique ID and at least one relevant filename; add a one-based page when the
+evidence page has been reviewed:
+
+```json
+{"id":"l293-voltage","question":"What is the L293 supply voltage range?","expected_sources":[{"filename":"32_L293_datasheet.pdf","page":1}]}
+```
+
+Install the evaluation package and ingestion worker in the same Python 3.11+
+environment, then run against an actual reviewed file:
+
+```bash
+cd evaluation
+python -m pip install -e ../ingestion-worker -e ".[dev]"
+fabrag-evaluate questions.reviewed.jsonl --candidate-k 10 --top-n 5
+```
+
+The JSON output reports candidate recall@k/MRR and reranked recall@n/MRR. The
+committed `questions.example.jsonl` demonstrates the schema only; it is not a
+reviewed benchmark and must not be used to claim project quality.
+
 Planned metrics:
 
 - router classification accuracy;
@@ -290,7 +314,8 @@ Results will be reported as measured values rather than estimated product-impact
 - [x] Expose the core answer path through an initial FastAPI service.
 - [x] Add API-key authentication and a single-process rate-limit baseline.
 - [ ] Add a minimal web interface and feedback capture.
-- [ ] Build the offline evaluation harness and publish results.
+- [x] Build the initial offline retrieval/reranking evaluation harness.
+- [ ] Review the benchmark questions and publish measured results.
 - [x] Add request IDs and structured JSON access logs.
 - [ ] Add shared rate limiting, CI/CD, and deployment.
 

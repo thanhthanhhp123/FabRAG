@@ -192,6 +192,45 @@ only marked end-to-end verified when it has run against a real PDF/model/databas
   contract tests. The same upstream TestClient deprecation warning remains
   documented and unsuppressed.
 
+### 2026-08-11 — Offline retrieval evaluation harness
+
+- Pushed commits `08d180b`, `132cd2b`, and `8d4cb06` to `origin/main`; remote and
+  local `main` both resolved to `8d4cb06` before starting this milestone.
+- Chose evaluation before query routing so retrieval/reranker changes have a
+  repeatable quality signal. Initial scope is recall@k and mean reciprocal rank
+  (MRR) for hybrid candidates and reranked results, matched against reviewed
+  filename/page evidence.
+- The harness will define and validate a JSONL format, but will not label generated
+  examples as a reviewed benchmark. A tiny example file may demonstrate syntax;
+  actual reported project metrics remain blocked on human review of questions and
+  evidence labels.
+- Added a standalone `evaluation` package and `fabrag-evaluate` CLI. Each JSONL
+  record requires a unique ID, a non-blank question, and at least one expected
+  filename with an optional one-based evidence page. The loader rejects malformed
+  JSON, wrong JSON types, empty labels, duplicate IDs, booleans masquerading as
+  integer pages, and pages below 1 with line-aware errors.
+- Relevance matching requires exact filenames. When a reviewed page is supplied,
+  the retrieved chunk's page span must contain it; filename-only labels remain
+  available when the exact page has not been labeled. Metrics use the first
+  relevant one-based rank: recall is the fraction of questions with any relevant
+  result, while MRR averages `1 / rank` and assigns zero to misses.
+- The runner evaluates the same questions twice: raw hybrid candidates at
+  `candidate_k`, then the cross-encoder's top `top_n`. It emits a machine-readable
+  JSON summary with question count, cutoffs, candidate recall/MRR, and reranked
+  recall/MRR. Invalid cutoffs, including `top_n > candidate_k`, fail before model
+  or database work begins.
+- Added `questions.example.jsonl` only to demonstrate the schema. README and the
+  filename explicitly state that it is not a reviewed benchmark, so no quality
+  metric is reported from that single example.
+- Unit verification uses deterministic fake retrieval/reranking results to test
+  metric arithmetic without PostgreSQL or model downloads:
+
+  ```text
+  13 tests passed in 0.16s
+  Ruff lint passed
+  Ruff format check passed (3 files)
+  ```
+
 ## Current pipeline
 
 ```text

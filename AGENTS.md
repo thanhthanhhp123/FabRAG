@@ -39,12 +39,14 @@ Implemented:
 - fail-closed API-key authentication and single-process rate limiting
   (`api-service/fabrag_api/security.py`)
 - request correlation and JSON access logs (`api-service/fabrag_api/observability.py`)
+- offline source/page recall and MRR evaluation (`evaluation/fabrag_eval/evaluate.py`)
 
 Tested without heavyweight PDF/model/database dependencies:
 
 - 41 unit tests covering parsing, chunking, embedding helpers, ingestion error
   handling, retrieval validation, hybrid fusion, reranking, and generation
 - 11 API contract/security/observability tests
+- 13 evaluation loader, matching, and metric tests
 - Ruff lint and format checks
 
 Real PDF/model/database checks have also covered ingestion, retrieval, reranking,
@@ -60,6 +62,8 @@ datasheets/                       Input PDFs (public documents only)
 api-service/fabrag_api/main.py    HTTP health and grounded-answer endpoints
 api-service/fabrag_api/security.py API-key auth and local rate limiting
 api-service/fabrag_api/observability.py Request IDs and JSON access logs
+evaluation/fabrag_eval/evaluate.py Offline recall and MRR evaluation CLI
+evaluation/questions.example.jsonl Schema example, not a reviewed benchmark
 ingestion-worker/src/parse.py     Step 1: PDF -> Page(number, text)
 ingestion-worker/src/chunk.py     Step 2: Page -> ChunkRecord
 ingestion-worker/src/embed.py     Step 3: chunk text -> normalized vectors
