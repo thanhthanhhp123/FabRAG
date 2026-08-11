@@ -35,6 +35,7 @@ Implemented:
   `hybrid_retrieve.py`)
 - BGE cross-encoder reranking (`rerank.py`)
 - local, evidence-only answer generation with source IDs (`answer.py`)
+- typed health and answer HTTP endpoints (`api-service/fabrag_api/main.py`)
 
 Tested without heavyweight PDF/model/database dependencies:
 
@@ -43,14 +44,16 @@ Tested without heavyweight PDF/model/database dependencies:
 - Ruff lint and format checks
 
 Real PDF/model/database checks have also covered ingestion, retrieval, reranking,
-and a Qwen answer-generation smoke test. Not implemented yet: an LLM router,
-FastAPI/UI, offline RAG evaluation, CI/CD, and deployment. Do not describe the
-repository as a deployed or production-ready chatbot until those parts exist.
+and a Qwen answer-generation smoke test. Not implemented yet: an LLM router, API
+authentication/rate limiting, UI, offline RAG evaluation, CI/CD, and deployment.
+Do not describe the repository as a deployed or production-ready chatbot until
+those parts exist.
 
 ## Directory map
 
 ```text
 datasheets/                       Input PDFs (public documents only)
+api-service/fabrag_api/main.py    HTTP health and grounded-answer endpoints
 ingestion-worker/src/parse.py     Step 1: PDF -> Page(number, text)
 ingestion-worker/src/chunk.py     Step 2: Page -> ChunkRecord
 ingestion-worker/src/embed.py     Step 3: chunk text -> normalized vectors

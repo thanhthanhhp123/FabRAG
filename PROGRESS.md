@@ -98,6 +98,55 @@ only marked end-to-end verified when it has run against a real PDF/model/databas
   boundary (or the evaluation harness before it), not reimplementing those core
   modules.
 
+### 2026-08-11 — FastAPI service baseline
+
+- Started after committing the verified Qwen work as commit `08d180b`
+  (`Verify grounded Qwen answer generation`). The new milestone follows item 1
+  in "Known limitations and next work": expose the online RAG pipeline through a
+  separate FastAPI service rather than adding HTTP concerns to the ingestion CLI.
+- Initial scope is deliberately small and testable without a model/database:
+  `GET /health` for process health and `POST /v1/answers` for question → retrieval
+  → reranking → generation. The answer response will include explicit filename,
+  page, chunk, and ranking metadata so API clients do not need to parse citations
+  from prose.
+- Request validation will bound `candidate_k` and `top_n`, with `top_n <=
+  candidate_k`. Backend/model/database failures will become a generic HTTP 503
+  response rather than exposing internal exception strings. API-key auth, rate
+  limiting, routing, and deployment remain separate hardening milestones and are
+  not claimed by this baseline.
+- Added `api-service` as a separate Python package. `GET /health` returns only
+  process liveness and intentionally does not load a model or touch PostgreSQL.
+  `POST /v1/answers` delegates to the existing `answer_question` pipeline and
+  returns the generated text plus `S1`, `S2`, ... records containing filename,
+  page span, chunk index, reranker score, original retrieval rank, vector rank,
+  and keyword rank.
+- Added request constraints: non-blank questions up to 2,000 characters,
+  `candidate_k` from 1 to 50, `top_n` from 1 to 10, and `top_n <= candidate_k`.
+  These limits prevent obviously accidental or disproportionately expensive
+  requests before a full rate limiter exists.
+- Added five HTTP contract tests covering liveness, successful source mapping,
+  cross-field validation, whitespace-only questions, and sanitized 503 errors.
+  A fake backend exception deliberately contains a database password-like string;
+  the test confirms it is absent from the HTTP response.
+- Verification on Python 3.11:
+
+  ```text
+  api-service:       5 passed in 0.98s
+  API Ruff lint:     passed
+  API format check:  3 files already formatted
+  ingestion-worker:  41 passed in 0.77s
+  worker Ruff lint:  passed
+  worker format:     18 files already formatted
+  ```
+
+  FastAPI's TestClient emitted one upstream `StarletteDeprecationWarning` about
+  the `httpx` compatibility layer. It does not affect these tests, but dependency
+  compatibility should be revisited during API hardening rather than suppressing
+  the warning.
+- Updated README setup, curl examples, repository layout, status, and roadmap.
+  The documentation explicitly warns that the baseline has no authentication or
+  rate limiting and must not be exposed to an untrusted network.
+
 ## Current pipeline
 
 ```text
@@ -391,8 +440,8 @@ unit suite.
 
 ## Known limitations and next work
 
-1. Move online retrieval/reranking/generation out of `ingestion-worker` into a
-   FastAPI service; the current location is an incremental prototype.
+1. Add API-key authentication, rate limiting, request IDs, and structured logs
+   before exposing the FastAPI service beyond a trusted development network.
 2. Ingest the complete corpus only after the single-document path is stable.
 3. Remove recurring headers/footers and improve PDF whitespace reconstruction.
 4. Add heading-aware/tokenizer-aware chunking and section metadata.

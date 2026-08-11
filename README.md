@@ -2,7 +2,7 @@
 
 FabRAG is a production-oriented Retrieval-Augmented Generation (RAG) project for electronics manufacturing documentation. It is designed to help engineers find grounded answers in component datasheets, equipment manuals, SOPs, work instructions, and public standards excerpts—with citations back to the source document and page.
 
-> **Project status:** active development. Ingestion, hybrid retrieval, reranking, and local grounded answer generation are implemented as a Python prototype. The query API, agentic router, evaluation harness, and web UI remain on the roadmap.
+> **Project status:** active development. Ingestion, hybrid retrieval, reranking, local grounded answer generation, and a FastAPI boundary are implemented as a Python prototype. The agentic router, evaluation harness, API hardening, and web UI remain on the roadmap.
 
 ## Why FabRAG?
 
@@ -30,6 +30,7 @@ The project is also a practical study of the LLM application layer: ingestion, r
 - Weighted reciprocal-rank fusion of vector and PostgreSQL full-text results.
 - Cross-encoder reranking with `BAAI/bge-reranker-base`.
 - Local evidence-only answer generation with source IDs such as `[S1]`.
+- A typed FastAPI endpoint returning answers plus structured source metadata.
 
 ## Architecture
 
@@ -70,6 +71,9 @@ The planned services are independently deployable:
 
 ```text
 FabRAG/
+├── api-service/                    # FastAPI boundary for online questions
+│   ├── fabrag_api/main.py          # Health and grounded-answer endpoints
+│   └── tests/                      # HTTP contract tests with a mocked pipeline
 ├── datasheets/                    # 50-document starter corpus
 ├── ingestion-worker/
 │   ├── src/
@@ -213,6 +217,39 @@ You can also inspect PDF extraction without connecting to PostgreSQL:
 python -m src.parse ../datasheets/16_LM358_datasheet.pdf
 ```
 
+### Run the API prototype
+
+The API currently imports the retrieval/generation pipeline from the ingestion
+worker. Install both packages into the same Python 3.11+ environment:
+
+```bash
+cd api-service
+python -m venv .venv
+source .venv/bin/activate
+python -m pip install -e ../ingestion-worker -e ".[dev]"
+uvicorn fabrag_api.main:app --host 127.0.0.1 --port 8000
+```
+
+The process-level health endpoint does not load models or query PostgreSQL:
+
+```bash
+curl http://127.0.0.1:8000/health
+```
+
+Submit a grounded question after `DATABASE_URL` is configured and the embedding,
+reranker, and generation models are available:
+
+```bash
+curl -X POST http://127.0.0.1:8000/v1/answers \
+  -H 'Content-Type: application/json' \
+  -d '{"question":"What is the L293 supply voltage range?","candidate_k":10,"top_n":3}'
+```
+
+The response contains `answer` text and a `sources` array with stable IDs,
+filename, page span, chunk index, and retrieval/reranker metadata. This baseline
+does not yet provide API-key authentication or rate limiting; do not expose it to
+an untrusted network.
+
 The Docker initialization script only runs against a new database volume. When the schema changes, apply the migration manually or recreate the local development volume if its data is disposable.
 
 ## Evaluation plan
@@ -239,7 +276,8 @@ Results will be reported as measured values rather than estimated product-impact
 - [x] Implement vector + keyword hybrid retrieval and reranking.
 - [ ] Build the function-calling query router.
 - [x] Add an initial cited answer-generation path and no-evidence fallback.
-- [ ] Expose a rate-limited, API-key-protected FastAPI service.
+- [x] Expose the core answer path through an initial FastAPI service.
+- [ ] Add API-key authentication and rate limiting before public exposure.
 - [ ] Add a minimal web interface and feedback capture.
 - [ ] Build the offline evaluation harness and publish results.
 - [ ] Add structured observability, CI/CD, and deployment.
